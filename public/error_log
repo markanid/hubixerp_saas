@@ -1,0 +1,10 @@
+[10-Jul-2026 16:43:15 UTC] PHP Warning:  require(/home/apexsoft/hubixerp.apexsoftlabs.com/vendor/composer/../yajra/laravel-datatables-oracle/src/helper.php): Failed to open stream: No such file or directory in /home/apexsoft/hubixerp.apexsoftlabs.com/vendor/composer/autoload_real.php on line 41
+[10-Jul-2026 16:43:15 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/apexsoft/hubixerp.apexsoftlabs.com/vendor/composer/../yajra/laravel-datatables-oracle/src/helper.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/apexsoft/hubixerp.apexsoftlabs.com/vendor/composer/autoload_real.php:41
+Stack trace:
+#0 /home/apexsoft/hubixerp.apexsoftlabs.com/vendor/composer/autoload_real.php(45): {closure}()
+#1 /home/apexsoft/hubixerp.apexsoftlabs.com/vendor/autoload.php(22): ComposerAutoloaderInit626b9e7ddd47fb7eff9aaa53cce0c9ad::getLoader()
+#2 /home/apexsoft/hubixerp.apexsoftlabs.com/public/index.php(13): require('/home/apexsoft/...')
+#3 {main}
+  thrown in /home/apexsoft/hubixerp.apexsoftlabs.com/vendor/composer/autoload_real.php on line 41
+[11-Jul-2026 09:12:36 UTC] PHP Fatal error:  Cannot use Illuminate\Support\Facades\Route as Route because the name is already in use in /home/apexsoft/hubixerp.apexsoftlabs.com/routes/tenant.php on line 9
+[11-Jul-2026 09:12:37 UTC] PHP Fatal error:  Cannot use Illuminate\Support\Facades\Route as Route because the name is already in use in /home/apexsoft/hubixerp.apexsoftlabs.com/routes/tenant.php on line 9

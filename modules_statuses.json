@@ -1,0 +1,15 @@
+{
+    "Product": true,
+    "Master": true,
+    "Settings": true,
+    "Purchase": true,
+    "Finance": true,
+    "Contacts": true,
+    "Sale": true,
+    "Returns": true,
+    "Estimation": true,
+    "Service": true,
+    "Consumption": true,
+    "Reports": true,
+    "Pos": true
+}

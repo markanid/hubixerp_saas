@@ -1,0 +1,15 @@
+
+/* Adjust column widths */
+#purchase_table th:nth-child(4), 
+#purchase_table td:nth-child(4), 
+#purchase_table td:nth-child(4) input { 
+    width: 80px !important; /* Ensure Unit Price column is wide enough */
+}
+
+#purchase_table th:nth-child(5), 
+#purchase_table td:nth-child(5), 
+#purchase_table td:nth-child(5) input { 
+    width: 80px !important; /* Ensure Qty column is wide enough */
+}
+
+

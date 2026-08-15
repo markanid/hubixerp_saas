@@ -1,0 +1,11 @@
+{
+    "name": "Pos",
+    "alias": "pos",
+    "description": "Fast point of sale billing module",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Pos\\app\\Providers\\PosServiceProvider"
+    ],
+    "files": []
+}

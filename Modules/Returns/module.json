@@ -1,0 +1,11 @@
+{
+    "name": "Returns",
+    "alias": "returns",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Returns\\app\\Providers\\ReturnsServiceProvider"
+    ],
+    "files": []
+}

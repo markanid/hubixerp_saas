@@ -1,0 +1,11 @@
+{
+    "name": "Consumption",
+    "alias": "consumption",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Consumption\\app\\Providers\\ConsumptionServiceProvider"
+    ],
+    "files": []
+}

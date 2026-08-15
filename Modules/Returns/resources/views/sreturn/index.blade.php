@@ -1,0 +1,253 @@
+@extends('layout')
+
+@section('content-header')
+<div class="content-header">
+    <div class="container-fluid">
+        <div class="row mb-2">
+            <div class="col-sm-6">
+                <h1 class="m-0"></h1>
+            </div>
+            <div class="col-sm-6">
+                <ol class="breadcrumb float-sm-right">
+                    <li class="breadcrumb-item">Dashboard</li>
+                    <li class="breadcrumb-item active">{{ $page_title }}</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+
+@section('body')       
+<div class="container-fluid">
+    <div class="card card-primary card-outline">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-undo-alt"></i> {{ $page_title }}</h3>
+            <div class="card-tools d-flex gap-2">
+                @can('sale.create')
+                <a class="btn btn-primary btn-sm btn-flat" href="{{ route('sales-returns.create') }}">
+                    <i class="fas fa-plus-circle"></i> Create
+                </a>
+                @endcan
+            </div>
+        </div>
+
+        <div class="card-body">
+            <form method="GET" action="{{ $is_cancelled ? route('sales-returns.cancelled') : route('sales-returns.index') }}" class="form-inline mb-3">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <div class="input-group">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text"><i class="far fa-calendar-alt"></i></span>
+                                </div>
+                                <input type="text" name="fromtodates" class="form-control float-right" id="reservation" placeholder="Date Range" value="{{ request('fromtodates') ?: '' }}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <div class="input-group">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text"><i class="fa-solid fa-receipt"></i></span>
+                                </div>
+                                <input type="text" name="voucher" class="form-control" placeholder="Return No" value="{{ request('voucher') }}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <div class="input-group">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text"><i class="fas fa-user-tie"></i></span>
+                                </div>
+                                <input type="text" name="customer" class="form-control" placeholder="Customer Name" value="{{ request('customer') }}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <div class="input-group">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text"><i class="fa-solid fa-phone"></i></span>
+                                </div>
+                                <input type="text" name="phone" class="form-control" placeholder="Customer Phone" value="{{ request('phone') }}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer" align="center">
+                <button type="submit" class="btn btn-primary btn-flat btn-sm">
+                    <i class="fa-solid fa-magnifying-glass"></i> Search
+                </button>
+                <a href="{{ $is_cancelled ? route('sales-returns.cancelled') : route('sales-returns.index') }}" class="btn btn-secondary btn-flat btn-sm ml-2">
+                    <i class="fas fa-undo-alt"></i> Reset
+                </a>
+
+                @if(!$is_cancelled)
+                    <a class="btn btn-danger btn-sm btn-flat ml-2" href="{{ route('sales-returns.cancelled') }}">
+                        <i class="fas fa-ban"></i> Cancelled
+                    </a>
+                @else
+                    <a class="btn btn-success btn-sm btn-flat ml-2" href="{{ route('sales-returns.index') }}">
+                        <i class="fas fa-list"></i> Show List
+                    </a>
+                @endif
+            </div>
+        </form>
+    </div>
+
+    <div class="card card-navy">
+        <div class="card-header">
+            @if($from_date || $to_date)
+                <h3 class="card-title">
+                    Showing @if($is_cancelled) cancelled @endif sale-returns from: <strong>{{ $from_date ?: 'start' }}</strong> to <strong>{{ $to_date ?: 'end' }}</strong>
+                </h3>
+            @else
+                <h3 class="card-title">
+                    Showing @if($is_cancelled) cancelled @endif sale-returns for: <strong>{{ \Carbon\Carbon::now()->format('F Y') }}</strong>
+                </h3>
+            @endif
+        </div>
+        <div class="card-body">
+            <table id="return_table" class="table table-hover text-nowrap">
+                <thead>
+                    <tr>
+                        <th>SNo</th>
+                        <th>Date</th>
+                        <th>Return No.</th>
+                        <th>Sale Bill No.</th>
+                        <th>Customer</th>
+                        <th>Total</th>
+                        <th>Payment Status</th>
+                        <th>Options</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($returns as $i => $row)
+                        @php
+                            $status = $row->pr_paid == 'NP'
+                                ? "<font color='#b20000'><b>Not Completed</b></font>"
+                                : "<font color='#228B22'><b>Completed</b></font>";
+                        @endphp
+                        <tr>
+                            <td>{{ $i + 1 }}</td>
+                            <td>{{ $row->pr_date }}</td>
+                            <td>
+                                <a href="{{ $is_cancelled ? route('sales-returns.showCancelled', $row->pr_id) : route('sales-returns.show', $row->pr_id) }}">
+                                    {{ $row->pr_vno }}
+                                </a>
+                            </td>
+                            <td>{{ $row->pr_pvno }}</td>
+                            <td>
+                                @if($row->customer)
+                                    <a href="{{ route('customers.show', $row->pr_vendor) }}">{{ $row->customer->customer }}</a>
+                                @else
+                                    <span class="text-muted">No Customer</span>
+                                @endif
+                            </td>
+                            <td>{{ $row->pr_amount_payable }}</td>
+                            <td>{!! $status !!}</td>
+                            <td>
+                                @if(!$is_cancelled)
+                                    @can('sale.update')
+                                    <a class="btn btn-app" href="{{ route('sales-returns.edit', $row->pr_id) }}"><i class="fas fa-edit"></i></a>
+                                    @endcan
+                                    @can('sale.cancel')
+                                    <button type="button"
+                                            class="btn btn-app-delete delete-btn"
+                                            data-form-id="cancel-sale-return-{{ $row->pr_id }}">
+                                        <i class="far fa-trash-alt"></i>
+                                    </button>
+                                    <form id="cancel-sale-return-{{ $row->pr_id }}"
+                                          method="POST"
+                                          action="{{ route('sales-returns.delete', $row->pr_id) }}"
+                                          class="d-none">
+                                        @csrf
+                                        @method('DELETE')
+                                    </form>
+                                    @endcan
+                                @else
+                                    <span class="text-muted">No Actions</span>
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+@endsection
+@include('partials.delete-modal')
+@php
+    $fy = session('financial_year');
+    [$startYear, $endYear] = explode('-', $fy);
+    $fyStart = \Carbon\Carbon::createFromDate($startYear, 4, 1)->format('Y-m-d');
+    $fyEnd = \Carbon\Carbon::createFromDate($endYear, 3, 31)->format('Y-m-d');
+@endphp
+@section('scripts')
+<script>
+    const fyStart = "{{ $fyStart }}";
+    const fyEnd = "{{ $fyEnd }}";
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    let cancellationForm = null;
+    const modal = document.getElementById('delete-confirmation-modal');
+    const modalTitle = modal?.querySelector('.modal-title');
+    const modalMessage = modal?.querySelector('.modal-body p');
+    const confirmButton = document.getElementById('confirm-delete-btn');
+
+    if (!modal || !confirmButton) {
+        return;
+    }
+
+    if (modalTitle) {
+        modalTitle.textContent = 'Confirm Sale-Return Cancellation';
+    }
+
+    if (modalMessage) {
+        modalMessage.textContent = 'Are you sure you want to cancel this sale-return? Stock and financial entries will be reversed.';
+    }
+
+    confirmButton.textContent = 'Cancel Sale-Return';
+
+    document.addEventListener('click', function (event) {
+        const deleteButton = event.target.closest('.delete-btn');
+
+        if (!deleteButton) {
+            return;
+        }
+
+        event.preventDefault();
+        cancellationForm = document.getElementById(deleteButton.dataset.formId);
+
+        if (cancellationForm) {
+            $('#delete-confirmation-modal').modal('show');
+        }
+    });
+
+    confirmButton.addEventListener('click', function (event) {
+        event.preventDefault();
+
+        if (!cancellationForm) {
+            return;
+        }
+
+        confirmButton.classList.add('disabled');
+        confirmButton.setAttribute('aria-disabled', 'true');
+        cancellationForm.submit();
+    });
+
+    $('#delete-confirmation-modal').on('hidden.bs.modal', function () {
+        cancellationForm = null;
+        confirmButton.classList.remove('disabled');
+        confirmButton.removeAttribute('aria-disabled');
+    });
+});
+</script>
+@include('partials.common-index-script', ['tableId' => 'return_table'])
+@endsection

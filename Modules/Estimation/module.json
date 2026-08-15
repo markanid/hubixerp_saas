@@ -1,0 +1,11 @@
+{
+    "name": "Estimation",
+    "alias": "estimation",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Estimation\\app\\Providers\\EstimationServiceProvider"
+    ],
+    "files": []
+}
