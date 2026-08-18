@@ -225,7 +225,7 @@
                             <hr>
 
                             <div class="alert alert-info py-2">
-                                Use Browser Print for the normal dialog, or Hubix Local Print Agent for silent printing to a mapped Windows printer. If the agent is unavailable, the document offers a browser-print fallback.
+                                Use Browser Print for the normal dialog, or Hubix Local Print Agent for a mapped Windows printer. With Auto Print enabled, Hubix prints silently; with it disabled, the document remains open for review until you click Print with Hubix.
                             </div>
 
                             <div class="table-responsive">
@@ -301,7 +301,7 @@
                                 </table>
                             </div>
 
-                            <small class="form-text text-muted">Scale and margins are applied by both printing methods. Printer mappings are maintained per computer below.</small>
+                            <small class="form-text text-muted">Scale and margins are applied by both printing methods. Disable Auto Print to preview a document before sending it to Hubix. Printer mappings are maintained per computer below.</small>
 
                             <h5 class="mt-4">Local Print Agents</h5>
                             <hr>

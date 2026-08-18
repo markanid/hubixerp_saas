@@ -8,28 +8,31 @@
 
     var config = window.HubixLocalPrint;
     var statusBox = document.getElementById('hubix-print-status');
-    var terminalStatuses = ['printed', 'failed', 'expired'];
+    var messageBox = document.getElementById('hubix-print-message');
+    var actions = document.getElementById('hubix-print-actions');
+    var agentButton = document.getElementById('hubix-agent-print');
+    var browserButton = document.getElementById('hubix-browser-print');
+    var jobRequested = false;
 
     function setStatus(message, isError) {
         if (!statusBox) return;
-        statusBox.textContent = message;
+        if (messageBox) messageBox.textContent = message;
         statusBox.style.borderColor = isError ? '#dc3545' : '#ced4da';
         statusBox.style.color = isError ? '#721c24' : '#212529';
     }
 
+    function showActions(showAgent, showBrowser) {
+        if (!actions) return;
+        if (agentButton) agentButton.style.display = showAgent ? 'inline-block' : 'none';
+        if (browserButton) browserButton.style.display = showBrowser ? 'inline-block' : 'none';
+        actions.style.display = showAgent || showBrowser ? 'flex' : 'none';
+    }
+
     function offerBrowserFallback(message) {
         setStatus(message + ' Use the browser print dialog if you still need to print.', true);
-        if (!statusBox) return;
-
-        var actions = document.createElement('div');
-        actions.style.marginTop = '10px';
-        var button = document.createElement('button');
-        button.type = 'button';
-        button.textContent = 'Print in browser';
-        button.style.cssText = 'padding:6px 10px;border:0;border-radius:3px;background:#007bff;color:#fff;cursor:pointer;';
-        button.addEventListener('click', function () { window.print(); });
-        actions.appendChild(button);
-        statusBox.appendChild(actions);
+        jobRequested = false;
+        if (agentButton) agentButton.disabled = false;
+        showActions(true, true);
     }
 
     function jsonFetch(url, options) {
@@ -67,32 +70,50 @@
                 }
 
                 setStatus(job.status === 'printing'
-                    ? 'Printing on the selected local printer…'
-                    : 'Waiting for Hubix Local Print Agent…', false);
-                window.setTimeout(check, 1000);
+                    ? 'Printing on the selected local printer...'
+                    : 'Waiting for Hubix Local Print Agent...', false);
+                window.setTimeout(check, 500);
             }).catch(function (error) {
                 offerBrowserFallback(error.message || 'Unable to check print status.');
             });
-        }, 500);
+        }, 250);
     }
 
-    jsonFetch(config.createUrl, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': config.csrfToken
-        },
-        body: JSON.stringify({
-            document_type: config.documentType,
-            document_id: config.documentId,
-            copies: 1
-        })
-    }).then(function (job) {
-        setStatus('Queued on ' + job.agent + '. Waiting for the printer…', false);
-        poll(job.status_url);
-    }).catch(function (error) {
-        offerBrowserFallback(error.message || 'No local print agent is available.');
-    });
+    function queuePrintJob() {
+        if (jobRequested) return;
+
+        jobRequested = true;
+        if (agentButton) agentButton.disabled = true;
+        showActions(false, false);
+        setStatus('Sending document to Hubix Local Print Agent...', false);
+
+        jsonFetch(config.createUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': config.csrfToken
+            },
+            body: JSON.stringify({
+                document_type: config.documentType,
+                document_id: config.documentId,
+                copies: 1
+            })
+        }).then(function (job) {
+            setStatus('Queued on ' + job.agent + '. Waiting for the printer...', false);
+            poll(job.status_url);
+        }).catch(function (error) {
+            offerBrowserFallback(error.message || 'No local print agent is available.');
+        });
+    }
+
+    if (agentButton) agentButton.addEventListener('click', queuePrintJob);
+    if (browserButton) browserButton.addEventListener('click', function () { window.print(); });
+
+    if (config.autoPrint) {
+        queuePrintJob();
+    } else {
+        showActions(true, true);
+    }
 }());

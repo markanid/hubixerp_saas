@@ -51,7 +51,7 @@ class PrintAgentApiController extends Controller
             'agent_id' => $agent->uuid,
             'agent_name' => $agent->name,
             'token' => $plainToken,
-            'poll_seconds' => 3,
+            'poll_seconds' => 1,
             'heartbeat_seconds' => 30,
         ]);
     }
@@ -102,7 +102,9 @@ class PrintAgentApiController extends Controller
     {
         /** @var PrintAgent $agent */
         $agent = $request->attributes->get('printAgent');
-        $agent->update(['last_seen_at' => now()]);
+        if (!$agent->last_seen_at || $agent->last_seen_at->lt(now()->subSeconds(30))) {
+            $agent->update(['last_seen_at' => now()]);
+        }
 
         $claimed = DB::transaction(function () use ($agent) {
             LocalPrintJob::query()

@@ -156,6 +156,8 @@ internal sealed class MainForm : Form
             _settings.AgentId = paired.AgentId;
             _settings.AgentName = paired.AgentName;
             _settings.Token = paired.Token;
+            _settings.PollSeconds = Math.Clamp(paired.PollSeconds, 1, 30);
+            _settings.HeartbeatSeconds = Math.Clamp(paired.HeartbeatSeconds, 10, 300);
             SettingsStore.Save(_settings);
             ApplyStartupSetting(_settings.StartWithWindows);
             _api.UpdateSettings(_settings);
@@ -181,6 +183,8 @@ internal sealed class MainForm : Form
         if (!TryReadUi(out var updated)) return;
         updated.Token = _settings.Token;
         updated.AgentId = _settings.AgentId;
+        updated.PollSeconds = _settings.PollSeconds;
+        updated.HeartbeatSeconds = _settings.HeartbeatSeconds;
         _settings = updated;
         SettingsStore.Save(_settings);
         ApplyStartupSetting(_settings.StartWithWindows);
@@ -213,21 +217,45 @@ internal sealed class MainForm : Form
 
     private async Task RunAsync(CancellationToken cancellationToken)
     {
-        var nextHeartbeat = DateTimeOffset.MinValue;
+        try
+        {
+            await _printer.InitializeAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            _lastError = ex.Message;
+            SetStatus($"Print engine initialization failed: {ex.Message}", true);
+        }
+
+        var heartbeatTask = RunHeartbeatAsync(cancellationToken);
+        try
+        {
+            await RunJobLoopAsync(cancellationToken);
+        }
+        finally
+        {
+            try { await heartbeatTask; }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        }
+    }
+
+    private async Task RunJobLoopAsync(CancellationToken cancellationToken)
+    {
         while (!cancellationToken.IsCancellationRequested && _settings.IsPaired)
         {
             try
             {
-                if (DateTimeOffset.UtcNow >= nextHeartbeat)
-                {
-                    await _api.HeartbeatAsync(PrinterCatalog.Installed(), PrinterCatalog.Default(), _lastError, cancellationToken);
-                    nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(30);
-                    _lastError = null;
-                    SetStatus("Online. Waiting for print jobs.", false);
-                }
-
                 var job = await _api.NextJobAsync(cancellationToken);
-                if (job is not null) await ProcessJobAsync(job, cancellationToken);
+                if (job is not null)
+                {
+                    await ProcessJobAsync(job, cancellationToken);
+                    continue;
+                }
+                SetStatus("Online. Waiting for print jobs.", false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
             catch (Exception ex)
@@ -236,7 +264,30 @@ internal sealed class MainForm : Form
                 SetStatus($"Offline/error: {ex.Message}", true);
             }
 
-            try { await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken); }
+            try { await Task.Delay(TimeSpan.FromSeconds(_settings.PollSeconds), cancellationToken); }
+            catch (OperationCanceledException) { break; }
+        }
+    }
+
+    private async Task RunHeartbeatAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested && _settings.IsPaired)
+        {
+            try
+            {
+                var printers = await Task.Run(PrinterCatalog.Installed, cancellationToken);
+                var defaultPrinter = await Task.Run(PrinterCatalog.Default, cancellationToken);
+                await _api.HeartbeatAsync(printers, defaultPrinter, _lastError, cancellationToken);
+                _lastError = null;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
+            catch (Exception ex)
+            {
+                _lastError = ex.Message;
+                SetStatus($"Heartbeat error: {ex.Message}", true);
+            }
+
+            try { await Task.Delay(TimeSpan.FromSeconds(_settings.HeartbeatSeconds), cancellationToken); }
             catch (OperationCanceledException) { break; }
         }
     }

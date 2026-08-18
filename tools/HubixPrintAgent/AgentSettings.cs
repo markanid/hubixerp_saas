@@ -10,6 +10,8 @@ internal sealed class AgentSettings
     public string AgentName { get; set; } = Environment.MachineName;
     public string? AgentId { get; set; }
     public bool StartWithWindows { get; set; } = true;
+    public int PollSeconds { get; set; } = 1;
+    public int HeartbeatSeconds { get; set; } = 30;
     public string? Token { get; set; }
     public bool IsPaired => !string.IsNullOrWhiteSpace(Token);
 }
@@ -32,6 +34,8 @@ internal static class SettingsStore
                 AgentName = persisted.AgentName ?? Environment.MachineName,
                 AgentId = persisted.AgentId,
                 StartWithWindows = persisted.StartWithWindows,
+                PollSeconds = Math.Clamp(persisted.PollSeconds, 1, 30),
+                HeartbeatSeconds = Math.Clamp(persisted.HeartbeatSeconds, 10, 300),
             };
             if (!string.IsNullOrWhiteSpace(persisted.ProtectedToken))
             {
@@ -61,6 +65,8 @@ internal static class SettingsStore
             AgentName = settings.AgentName,
             AgentId = settings.AgentId,
             StartWithWindows = settings.StartWithWindows,
+            PollSeconds = Math.Clamp(settings.PollSeconds, 1, 30),
+            HeartbeatSeconds = Math.Clamp(settings.HeartbeatSeconds, 10, 300),
             ProtectedToken = protectedToken,
         };
         File.WriteAllText(SettingsPath, JsonSerializer.Serialize(persisted, new JsonSerializerOptions { WriteIndented = true }));
@@ -72,6 +78,8 @@ internal static class SettingsStore
         public string? AgentName { get; set; }
         public string? AgentId { get; set; }
         public bool StartWithWindows { get; set; } = true;
+        public int PollSeconds { get; set; } = 1;
+        public int HeartbeatSeconds { get; set; } = 30;
         public string? ProtectedToken { get; set; }
     }
 }

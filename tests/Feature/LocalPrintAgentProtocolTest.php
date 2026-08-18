@@ -10,6 +10,8 @@ use Modules\Settings\app\Models\LocalPrintJob;
 use Modules\Settings\app\Models\PrintAgent;
 use Modules\Settings\app\Models\PrintAgentPrinterMapping;
 use Modules\Settings\app\Models\PrintSetting;
+use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
+use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 use Tests\TestCase;
 
 class LocalPrintAgentProtocolTest extends TestCase
@@ -21,6 +23,10 @@ class LocalPrintAgentProtocolTest extends TestCase
         config()->set('database.default', 'sqlite');
         config()->set('database.connections.sqlite.database', ':memory:');
         DB::purge('sqlite');
+        $this->withoutMiddleware([
+            InitializeTenancyByDomain::class,
+            PreventAccessFromCentralDomains::class,
+        ]);
 
         Schema::create('print_agents', function (Blueprint $table) {
             $table->id();
@@ -80,13 +86,14 @@ class LocalPrintAgentProtocolTest extends TestCase
     public function test_agent_token_claims_each_job_once_and_enforces_state_transitions(): void
     {
         $token = 'agent-secret-token';
+        $lastSeenAt = now()->startOfSecond();
         $agent = PrintAgent::create([
             'uuid' => (string) Str::uuid(),
             'name' => 'Counter 1',
             'token_hash' => hash('sha256', $token),
             'enabled' => true,
             'printers' => ['Receipt Printer'],
-            'last_seen_at' => now(),
+            'last_seen_at' => $lastSeenAt,
         ]);
         PrintAgentPrinterMapping::create([
             'print_agent_id' => $agent->id,
@@ -119,5 +126,33 @@ class LocalPrintAgentProtocolTest extends TestCase
         $this->withToken($token)->postJson(route('api.print-agent.jobs.status', $job), ['status' => 'printing'], $headers)->assertOk();
         $this->withToken($token)->postJson(route('api.print-agent.jobs.status', $job), ['status' => 'printed'], $headers)->assertOk();
         $this->assertDatabaseHas('local_print_jobs', ['id' => $job->id, 'status' => LocalPrintJob::STATUS_PRINTED]);
+        $this->assertSame($lastSeenAt->format('Y-m-d H:i:s'), $agent->fresh()->last_seen_at->format('Y-m-d H:i:s'));
+    }
+
+    public function test_local_agent_auto_print_setting_is_exposed_to_the_preview_script(): void
+    {
+        $manualSetting = new PrintSetting(array_merge(
+            PrintSetting::defaultsFor('sale'),
+            ['print_method' => 'local_agent', 'auto_print' => false]
+        ));
+        $automaticSetting = new PrintSetting(array_merge(
+            PrintSetting::defaultsFor('sale'),
+            ['print_method' => 'local_agent', 'auto_print' => true]
+        ));
+
+        $manualHtml = view('partials.local-print-script', [
+            'printSetting' => $manualSetting,
+            'documentType' => 'sale',
+            'documentId' => 55,
+        ])->render();
+        $automaticHtml = view('partials.local-print-script', [
+            'printSetting' => $automaticSetting,
+            'documentType' => 'sale',
+            'documentId' => 55,
+        ])->render();
+
+        $this->assertStringContainsString('Print with Hubix', $manualHtml);
+        $this->assertStringContainsString('autoPrint: false', $manualHtml);
+        $this->assertStringContainsString('autoPrint: true', $automaticHtml);
     }
 }

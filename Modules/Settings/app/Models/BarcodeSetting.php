@@ -38,7 +38,7 @@ class BarcodeSetting extends Model
         '6' => 'L',
         '7' => 'I',
         '8' => 'N',
-        '9' => '6',
+        '9' => 'E',
         '0' => 'X',
     ];
 

@@ -10,6 +10,10 @@ Windows tray agent for silent, printer-specific HubixERP document printing. It u
 4. Wait for the agent to report its installed printers, map each document type, and use **Print Test**.
 5. Change the required document profiles from **Browser Print** to **Hubix Local Print Agent**.
 
+When **Auto Print** is enabled, opening a print document sends it directly to the mapped printer. Disable **Auto Print** to review the document first and send it only after clicking **Print with Hubix**.
+
+The server controls the idle polling and heartbeat intervals returned during pairing. The agent immediately checks for another job after each completed print so queued documents are not held behind an additional polling delay.
+
 The device token is stored with Windows DPAPI for the current user. The agent must run in that same Windows user session so it can access that user's printers and WebView2 runtime.
 
 ## Build

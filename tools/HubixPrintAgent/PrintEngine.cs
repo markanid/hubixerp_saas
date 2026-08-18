@@ -10,15 +10,21 @@ internal sealed class PrintEngine
 
     public PrintEngine(WebView2 webView) => _webView = webView;
 
+    public async Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        await _webView.EnsureCoreWebView2Async().WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+        var settings = _webView.CoreWebView2.Settings;
+        settings.AreDevToolsEnabled = false;
+        settings.AreDefaultContextMenusEnabled = false;
+    }
+
     public async Task PrintAsync(PrintJob job, string agentToken, CancellationToken cancellationToken)
     {
         await _printLock.WaitAsync(cancellationToken);
         try
         {
-            await _webView.EnsureCoreWebView2Async();
+            await InitializeAsync(cancellationToken);
             var core = _webView.CoreWebView2;
-            core.Settings.AreDevToolsEnabled = false;
-            core.Settings.AreDefaultContextMenusEnabled = false;
 
             var navigation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             void NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs args)
@@ -43,7 +49,23 @@ internal sealed class PrintEngine
                 core.NavigationCompleted -= NavigationCompleted;
             }
 
-            await core.ExecuteScriptAsync("(async()=>{if(document.fonts&&document.fonts.ready){await document.fonts.ready;}await Promise.all(Array.from(document.images).map(i=>i.complete?Promise.resolve():new Promise(r=>{i.onload=r;i.onerror=r;})));return true;})()");
+            const string readinessScript = """
+                (async () => {
+                    const timeout = new Promise(resolve => window.setTimeout(resolve, 5000));
+                    const fonts = document.fonts && document.fonts.ready
+                        ? document.fonts.ready.catch(() => undefined)
+                        : Promise.resolve();
+                    const images = Promise.all(Array.from(document.images).map(image => image.complete
+                        ? Promise.resolve()
+                        : new Promise(resolve => {
+                            image.addEventListener('load', resolve, { once: true });
+                            image.addEventListener('error', resolve, { once: true });
+                        })));
+                    await Promise.race([Promise.all([fonts, images]), timeout]);
+                    return true;
+                })()
+                """;
+            await core.ExecuteScriptAsync(readinessScript).WaitAsync(TimeSpan.FromSeconds(7), cancellationToken);
 
             var settings = core.Environment.CreatePrintSettings();
             settings.PrinterName = job.PrinterName;
