@@ -41,6 +41,7 @@
     $taxType = strtolower((string) ($taxType ?? 'gst'));
     $taxLabel = $taxLabel ?? ($taxType === 'vat' ? 'VAT' : 'GST');
     $showTax = (bool) ($collectTax ?? true) && (string) $purchase->pu_type !== '2';
+    $showCodePrinting = in_array($inventoryMode ?? 'standard', ['mrp', 'batch'], true);
     $purchaseItemLabels = collect($purchaseItemLabels ?? []);
 @endphp
 
@@ -199,7 +200,9 @@
                             <th>Taxable<br>Value</th>
                             <th>{{ $taxLabel }}</th>
                         @endif
-                        <th class="text-center">Print Codes</th>
+                        @if($showCodePrinting)
+                            <th class="text-center">Print Codes</th>
+                        @endif
                     </tr>
                 </thead>
 
@@ -245,12 +248,13 @@
                                 <td>{{ $purchaseDetail->pud_total - $purchaseDetail->pud_gst }}</td>
                                 <td>{{ $purchaseDetail->pud_gst . ' (' . ($purchaseDetail->product?->gst ?? 0) . '%)' }}</td>
                             @endif
-                            <td class="text-center text-nowrap">
-                                @if($purchaseDetail->product)
-                                    @php
-                                        $itemLabel = $purchaseItemLabels->get($purchaseDetail->pud_id);
-                                        $barcodeUrl = $itemLabel
-                                            ? route('products.inventory-label.barcode.print', [$purchaseDetail->product, $itemLabel])
+                            @if($showCodePrinting)
+                                <td class="text-center text-nowrap">
+                                    @if($purchaseDetail->product)
+                                        @php
+                                            $itemLabel = $purchaseItemLabels->get($purchaseDetail->pud_id);
+                                            $barcodeUrl = $itemLabel
+                                                ? route('products.inventory-label.barcode.print', [$purchaseDetail->product, $itemLabel])
                                             : route('products.barcode', $purchaseDetail->product->id);
                                         $qrUrl = $itemLabel
                                             ? route('products.inventory-label.qr.print', [$purchaseDetail->product, $itemLabel])
@@ -266,14 +270,15 @@
                                         </a>
                                     </div>
                                     {{-- <div class="mt-1"><span class="badge badge-light border">{{ $codeScope }}</span></div> --}}
-                                @else
-                                    <span class="text-muted">Unavailable</span>
-                                @endif
-                            </td>
+                                    @else
+                                        <span class="text-muted">Unavailable</span>
+                                    @endif
+                                </td>
+                            @endif
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ ($showInventoryLot ? 10 : 9) + ($showTax ? 2 : 0) + 2 }}" class="text-center">
+                            <td colspan="{{ 10 + ($showInventoryLot ? 1 : 0) + ($showTax ? 2 : 0) + ($showCodePrinting ? 1 : 0) }}" class="text-center">
                                 No purchase details found
                             </td>
                         </tr>

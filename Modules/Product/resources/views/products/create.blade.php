@@ -118,11 +118,11 @@
                     <label>GST(%)</label>
                     <select name="gst" id="gst" tabindex="10" class="form-control">
                         <option value="">-- Select GST --</option>
-                        <option value="0"{{ isset($product->gst) && $product->gst == '0' ? 'selected' : '' }}>0 %</option>
-                        <option value="5"{{ isset($product->gst) && $product->gst == '5' ? 'selected' : '' }}>5 %</option>
-                        <option value="12"{{ isset($product->gst) && $product->gst == '12' ? 'selected' : '' }}>12 %</option>
-                        <option value="18"{{ isset($product->gst) && $product->gst == '18' ? 'selected' : '' }}>18 %</option>
-                        <option value="28"{{ isset($product->gst) && $product->gst == '28' ? 'selected' : '' }}>28 %</option>
+                        <option value="0" {{ old('gst', $product->gst ?? '0') == '0' ? 'selected' : '' }}>0 %</option>
+                        <option value="5" {{ old('gst', $product->gst ?? '') == '5' ? 'selected' : '' }}>5 %</option>
+                        <option value="12" {{ old('gst', $product->gst ?? '') == '12' ? 'selected' : '' }}>12 %</option>
+                        <option value="18" {{ old('gst', $product->gst ?? '') == '18' ? 'selected' : '' }}>18 %</option>
+                        <option value="28" {{ old('gst', $product->gst ?? '') == '28' ? 'selected' : '' }}>28 %</option>
                     </select> 
                     @if ($errors->has('gst'))
                     <span class="text-danger">{{ $errors->first('gst') }}</span>
@@ -132,11 +132,11 @@
                     <label>Unit</label>
                     <select name="unit" id="unit" tabindex="11" class="form-control" {{ $isUsed ? 'disabled' : '' }}>
                         <option value="">-- Select Unit --</option>
-                        <option value="No.s"{{ isset($product->unit) && $product->unit == 'No.s' ? 'selected' : '' }}>No.s</option>
-                        <option value="Kg"{{ isset($product->unit) && $product->unit == 'Kg' ? 'selected' : '' }}>Kg</option>
-                        <option value="Ltr"{{ isset($product->unit) && $product->unit == 'Ltr' ? 'selected' : '' }}>Litre</option>
-                        <option value="Box"{{ isset($product->unit) && $product->unit == 'Box' ? 'selected' : '' }}>Box</option>
-                        <option value="Pkt"{{ isset($product->unit) && $product->unit == 'Pkt' ? 'selected' : '' }}>Packet</option>
+                        <option value="No.s" {{ old('unit', $product->unit ?? 'No.s') == 'No.s' ? 'selected' : '' }}>No.s</option>
+                        <option value="Kg" {{ old('unit', $product->unit ?? '') == 'Kg' ? 'selected' : '' }}>Kg</option>
+                        <option value="Ltr" {{ old('unit', $product->unit ?? '') == 'Ltr' ? 'selected' : '' }}>Litre</option>
+                        <option value="Box" {{ old('unit', $product->unit ?? '') == 'Box' ? 'selected' : '' }}>Box</option>
+                        <option value="Pkt" {{ old('unit', $product->unit ?? '') == 'Pkt' ? 'selected' : '' }}>Packet</option>
                     </select> 
                     @if ($errors->has('unit'))
                     <span class="text-danger">{{ $errors->first('unit') }}</span>
@@ -154,21 +154,21 @@
                 </div>
                 <div class="form-group col-md-3">
                     <label>Min Qty</label>
-                    <input type="text" name="minquantity" id="min_quantity" tabindex="13" class="form-control" value="{{ !empty($product->minquantity) ? $product->minquantity : '' }}">
+                    <input type="text" name="minquantity" id="min_quantity" tabindex="13" class="form-control" value="{{ !empty($product->minquantity) ? $product->minquantity : '1' }}">
                     @if ($errors->has('minquantity'))
                     <span class="text-danger">{{ $errors->first('minquantity') }}</span>
                     @endif
                 </div>
                 <div class="form-group col-md-3">
                     <label>Max Qty</label>
-                    <input type="text" name="maxquantity" id="max_quantity" tabindex="14" class="form-control" value="{{ !empty($product->maxquantity) ? $product->maxquantity : '' }}">
+                    <input type="text" name="maxquantity" id="max_quantity" tabindex="14" class="form-control" value="{{ !empty($product->maxquantity) ? $product->maxquantity : '5' }}">
                     @if ($errors->has('maxquantity'))
                     <span class="text-danger">{{ $errors->first('maxquantity') }}</span>
                     @endif
                 </div>
                 <div class="form-group col-md-3">
                     <label>Stock Qty</label>
-                    <input type="text" name="stock_qty" id="stock_qty" tabindex="15" class="form-control" value=""
+                    <input type="text" name="stock_qty" id="stock_qty" tabindex="15" class="form-control" value="0"
                         {{ $batchMode && ($product->is_batch_managed ?? false) ? 'disabled' : '' }}>
                     @if($batchMode)<small class="text-muted">Opening stock for batch products must be entered through Purchase with batch details.</small>@endif
                     <span class="text-danger"></span>
@@ -245,8 +245,8 @@
                     <div class="form-group">
                         <label>Type<sup>*</sup></label>
                         <select name="typeid" id="type_id" tabindex="20" class="form-control" {{ $isUsed ? 'disabled' : '' }}>
-                            <option value="1"{{ isset($product->typeid) && $product->typeid == 1 ? 'selected' : '' }}>Non-Stockable</option>
                             <option value="2"{{ isset($product->typeid) && $product->typeid == 2 ? 'selected' : '' }}>Stockable</option>
+                            <option value="1"{{ isset($product->typeid) && $product->typeid == 1 ? 'selected' : '' }}>Non-Stockable</option>
                             <option value="3"{{ isset($product->typeid) && $product->typeid == 3 ? 'selected' : '' }}>Service</option>
                         </select> 
                         @if ($errors->has('typeid'))

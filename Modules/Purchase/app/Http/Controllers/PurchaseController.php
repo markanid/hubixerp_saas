@@ -292,6 +292,7 @@ class PurchaseController extends Controller
         $purchase = Purchase::with($this->purchaseViewRelations())
             ->where('pu_status', '1')
             ->findOrFail($id);
+        $inventoryMode = Company::query()->value('inventory_mode') ?? 'standard';
         $data['is_cancelled']   = false;
         $data['page_title']     = "View Purchase";
         $data['purchase']       = $purchase;
@@ -302,7 +303,8 @@ class PurchaseController extends Controller
         $data['gstScheme']      = $taxProfile['gst_scheme'];
         $data['isComposition']  = $taxProfile['is_composition'];
         $data['collectTax']     = $taxProfile['collect_tax'];
-        $data['purchaseItemLabels'] = $this->purchaseItemLabels($purchase);
+        $data['inventoryMode']  = $inventoryMode;
+        $data['purchaseItemLabels'] = $this->purchaseItemLabels($purchase, $inventoryMode);
         return view('purchase::purchases.view',$data);
     }
 
@@ -311,6 +313,7 @@ class PurchaseController extends Controller
         $purchase = Purchase::with($this->purchaseViewRelations())
             ->where('pu_status', '0')
             ->findOrFail($id);
+        $inventoryMode = Company::query()->value('inventory_mode') ?? 'standard';
         $data['is_cancelled']   = true;
         $data['page_title']     = "View Cancelled";
         $data['purchase']       = $purchase;
@@ -321,7 +324,8 @@ class PurchaseController extends Controller
         $data['gstScheme']      = $taxProfile['gst_scheme'];
         $data['isComposition']  = $taxProfile['is_composition'];
         $data['collectTax']     = $taxProfile['collect_tax'];
-        $data['purchaseItemLabels'] = $this->purchaseItemLabels($purchase);
+        $data['inventoryMode']  = $inventoryMode;
+        $data['purchaseItemLabels'] = $this->purchaseItemLabels($purchase, $inventoryMode);
         return view('purchase::purchases.view',$data);
     }
 
@@ -337,10 +341,8 @@ class PurchaseController extends Controller
         ];
     }
 
-    private function purchaseItemLabels(Purchase $purchase)
+    private function purchaseItemLabels(Purchase $purchase, string $inventoryMode)
     {
-        $inventoryMode = Company::query()->value('inventory_mode') ?? 'standard';
-
         if (!in_array($inventoryMode, ['mrp', 'batch'], true)) {
             return collect();
         }
