@@ -28,7 +28,7 @@
         }
     </style>
 </head>
-<body @if($thermalSettings['auto_print']) onload="window.print();" @endif>
+<body @if(!($printAgentRender ?? false) && ($printSetting->print_method ?? 'browser') === 'browser' && ($printSetting->auto_print ?? $thermalSettings['auto_print'])) onload="window.print();" @endif>
     <div class="dontprint">
         <a class="btn" href="{{ $backUrl }}">Back</a>
         <button class="btn" onclick="window.print()">Print</button>
@@ -59,13 +59,13 @@
                 <div class="codes">
                     @if(in_array($codeType, ['barcode', 'both'], true))
                         <div class="barcode">
-                            <img src="{{ route('inventory-labels.barcode', $label) }}" alt="Barcode {{ $label->barcode }}">
+                            <img src="{{ $row['barcode_image_src'] ?? route('inventory-labels.barcode', $label) }}" alt="Barcode {{ $label->barcode }}">
                             <div class="number">{{ $label->barcode }}</div>
                         </div>
                     @endif
                     @if(in_array($codeType, ['qr', 'both'], true))
                         <div class="qr">
-                            <img src="{{ route('inventory-labels.qr', $label) }}" alt="QR code {{ $label->barcode }}">
+                            <img src="{{ $row['qr_image_src'] ?? route('inventory-labels.qr', $label) }}" alt="QR code {{ $label->barcode }}">
                             <div class="number">{{ $label->barcode }}</div>
                         </div>
                     @endif
@@ -75,5 +75,9 @@
             <p>No inventory labels are available for this product in the active inventory mode.</p>
         @endforelse
     </div>
+
+    @if($rows->isNotEmpty())
+        @include('partials.local-print-script', ['printSetting' => $printSetting ?? null, 'documentType' => 'barcode', 'documentId' => null, 'printPayload' => $printPayload ?? null])
+    @endif
 </body>
 </html>

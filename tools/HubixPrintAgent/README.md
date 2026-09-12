@@ -8,9 +8,12 @@ Windows tray agent for silent, printer-specific HubixERP document printing. It u
 2. Create a pairing code for the billing computer.
 3. Extract the entire Windows ZIP, run `HubixPrintAgent.exe`, enter the HubixERP base URL and the one-time code, then click **Pair Agent**. Keep the extracted files together.
 4. Wait for the agent to report its installed printers, map each document type, and use **Print Test**.
-5. Change the required document profiles from **Browser Print** to **Hubix Local Print Agent**.
+5. On that same billing computer, click **Use on this browser** for the paired agent.
+6. Change the required document profiles, including **Barcode / QR Labels**, from **Browser Print** to **Hubix Local Print Agent**.
 
 When **Auto Print** is enabled, opening a print document sends it directly to the mapped printer. Disable **Auto Print** to review the document first and send it only after clicking **Print with Hubix**.
+
+Barcode and QR jobs use the thermal label width and height configured in Company Settings. Label printing requires agent version 1.0.3 or later.
 
 The server controls the idle polling and heartbeat intervals returned during pairing. The agent immediately checks for another job after each completed print so queued documents are not held behind an additional polling delay.
 

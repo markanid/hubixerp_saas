@@ -98,6 +98,7 @@
             body: JSON.stringify({
                 document_type: config.documentType,
                 document_id: config.documentId,
+                payload: config.payload,
                 copies: 1
             })
         }).then(function (job) {

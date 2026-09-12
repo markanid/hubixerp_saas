@@ -20,6 +20,11 @@ use Modules\Product\app\Services\MrpInventoryService;
 
 class CompanyController extends Controller
 {
+    private const PRINT_HEADER_MODES = [
+        'full' => 'Display all',
+        'compact' => 'Date, number and remark only',
+    ];
+
     private const CURRENCIES = [
         'INR' => ['symbol' => '₹', 'label' => 'Indian Rupee'],
         'USD' => ['symbol' => '$', 'label' => 'US Dollar'],
@@ -96,6 +101,7 @@ class CompanyController extends Controller
         $data['printMethods'] = PrintSetting::PRINT_METHODS;
         $data['paperSizes'] = PrintSetting::PAPER_SIZES;
         $data['orientations'] = PrintSetting::ORIENTATIONS;
+        $data['printHeaderModes'] = self::PRINT_HEADER_MODES;
         $data['barcodeFields'] = BarcodeSetting::FIELDS;
         $data['selectedBarcodeFields'] = BarcodeSetting::selectedFields();
         $data['thermalLabelSettings'] = BarcodeSetting::thermalSettings();
@@ -103,6 +109,7 @@ class CompanyController extends Controller
         $data['printAgents'] = Schema::hasTable('print_agents')
             ? PrintAgent::with('mappings')->orderByDesc('is_default')->orderBy('name')->get()
             : collect();
+        $data['boundPrintAgentUuid'] = (string) request()->cookie(PrintAgent::BROWSER_COOKIE, '');
 
         return view('settings::company.settings', $data);
     }
@@ -211,7 +218,6 @@ class CompanyController extends Controller
             'label_width_mm' => ['required', 'integer', 'min:20', 'max:150'],
             'label_height_mm' => ['required', 'integer', 'min:15', 'max:150'],
             'label_margin_mm' => ['required', 'integer', 'min:0', 'max:10'],
-            'label_auto_print' => ['nullable', 'boolean'],
             'mask_purchase_price' => ['nullable', 'boolean'],
             'print_settings' => ['nullable', 'array'],
             'print_settings.*.print_method' => ['required', Rule::in(array_keys(PrintSetting::PRINT_METHODS))],
@@ -220,6 +226,7 @@ class CompanyController extends Controller
             'print_settings.*.scale' => ['required', 'integer', 'min:50', 'max:150'],
             'print_settings.*.margin_mm' => ['required', 'integer', 'min:0', 'max:50'],
             'print_settings.*.auto_print' => ['nullable', 'boolean'],
+            'print_settings.*.header_mode' => ['nullable', Rule::in(array_keys(self::PRINT_HEADER_MODES))],
         ]);
 
         $company = Company::first();
@@ -241,7 +248,6 @@ class CompanyController extends Controller
             'label_width_mm' => $validated['label_width_mm'],
             'label_height_mm' => $validated['label_height_mm'],
             'label_margin_mm' => $validated['label_margin_mm'],
-            'auto_print' => !empty($validated['label_auto_print']),
             'mask_purchase_price' => !empty($validated['mask_purchase_price']),
         ];
         $submittedPrintSettings = $validated['print_settings'] ?? [];
@@ -252,7 +258,6 @@ class CompanyController extends Controller
             $validated['label_width_mm'],
             $validated['label_height_mm'],
             $validated['label_margin_mm'],
-            $validated['label_auto_print'],
             $validated['mask_purchase_price'],
             $validated['print_settings']
         );
@@ -300,6 +305,15 @@ class CompanyController extends Controller
                     'printer_name' => null,
                 ]
             );
+
+            if ($documentType === 'service' && Schema::hasColumn('print_settings', 'header_mode')) {
+                DB::table('print_settings')
+                    ->where('document_type', 'service')
+                    ->update([
+                        'header_mode' => $settings['header_mode'] ?? $defaults['header_mode'] ?? 'full',
+                        'updated_at' => now(),
+                    ]);
+            }
         }
 
         return redirect()->route('company.settings')->with('success', 'Company settings updated successfully.');

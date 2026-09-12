@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PrintAgent extends Model
 {
+    public const BROWSER_COOKIE = 'hubix_print_agent';
+    public const BARCODE_MIN_VERSION = '1.0.3';
+
     protected $fillable = [
         'uuid', 'name', 'machine_name', 'token_hash', 'pairing_code_hash',
         'pairing_expires_at', 'paired_by', 'enabled', 'is_default', 'version',

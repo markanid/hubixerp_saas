@@ -15,6 +15,8 @@ use Modules\Settings\app\Models\LocalPrintJob;
 
 class PrintAgentController extends Controller
 {
+    private const BROWSER_BINDING_MINUTES = 60 * 24 * 365;
+
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate(['name' => ['required', 'string', 'max:100']]);
@@ -104,6 +106,36 @@ class PrintAgentController extends Controller
         });
 
         return back()->with('success', "{$printAgent->name} is now the default print agent.");
+    }
+
+    public function bindBrowser(PrintAgent $printAgent): RedirectResponse
+    {
+        if (!$printAgent->enabled || !$printAgent->token_hash) {
+            return back()->with('error', 'Pair and enable the print agent before linking this browser.');
+        }
+
+        $binding = cookie(
+            PrintAgent::BROWSER_COOKIE,
+            $printAgent->uuid,
+            self::BROWSER_BINDING_MINUTES,
+            '/',
+            null,
+            null,
+            true,
+            false,
+            'strict'
+        );
+
+        return back()
+            ->with('success', "This browser is now linked to {$printAgent->name}.")
+            ->withCookie($binding);
+    }
+
+    public function unbindBrowser(): RedirectResponse
+    {
+        return back()
+            ->with('success', 'This browser is no longer linked to a local print agent.')
+            ->withCookie(cookie()->forget(PrintAgent::BROWSER_COOKIE));
     }
 
     public function test(Request $request, PrintAgent $printAgent): RedirectResponse

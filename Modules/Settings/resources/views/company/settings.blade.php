@@ -225,7 +225,7 @@
                             <hr>
 
                             <div class="alert alert-info py-2">
-                                Use Browser Print for the normal dialog, or Hubix Local Print Agent for a mapped Windows printer. With Auto Print enabled, Hubix prints silently; with it disabled, the document remains open for review until you click Print with Hubix.
+                                Use Browser Print for the normal dialog, or Hubix Local Print Agent for a mapped Windows printer. Each browser must be linked to its own agent below; Hubix will never send its jobs to another computer automatically.
                             </div>
 
                             <div class="table-responsive">
@@ -239,6 +239,7 @@
                                             <th style="width: 10%;">Scale %</th>
                                             <th style="width: 12%;">Margin mm</th>
                                             <th style="width: 10%;">Auto Print</th>
+                                            <th style="width: 15%;">Header</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -254,18 +255,33 @@
                                                     </select>
                                                 </td>
                                                 <td>
-                                                    <select name="print_settings[{{ $documentType }}][paper_size]" class="form-control form-control-sm">
-                                                        @foreach($paperSizes as $value => $label)
-                                                            <option value="{{ $value }}" {{ old("print_settings.$documentType.paper_size", $setting->paper_size) === $value ? 'selected' : '' }}>{{ $label }}</option>
-                                                        @endforeach
-                                                    </select>
+                                                    @if($documentType === 'barcode')
+                                                        <input type="hidden" name="print_settings[barcode][paper_size]" value="A4">
+                                                        <div class="d-flex align-items-center" style="gap: 4px; min-width: 145px;">
+                                                            <input id="label_width_mm" type="number" name="label_width_mm" min="20" max="150" class="form-control form-control-sm" value="{{ old('label_width_mm', $thermalLabelSettings['label_width_mm']) }}" title="Label width in millimetres" required>
+                                                            <span>&times;</span>
+                                                            <input id="label_height_mm" type="number" name="label_height_mm" min="15" max="150" class="form-control form-control-sm" value="{{ old('label_height_mm', $thermalLabelSettings['label_height_mm']) }}" title="Label height in millimetres" required>
+                                                        </div>
+                                                        <small class="text-muted">Width &times; height (mm)</small>
+                                                    @else
+                                                        <select name="print_settings[{{ $documentType }}][paper_size]" class="form-control form-control-sm">
+                                                            @foreach($paperSizes as $value => $label)
+                                                                <option value="{{ $value }}" {{ old("print_settings.$documentType.paper_size", $setting->paper_size) === $value ? 'selected' : '' }}>{{ $label }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    @endif
                                                 </td>
                                                 <td>
-                                                    <select name="print_settings[{{ $documentType }}][orientation]" class="form-control form-control-sm">
-                                                        @foreach($orientations as $value => $label)
-                                                            <option value="{{ $value }}" {{ old("print_settings.$documentType.orientation", $setting->orientation) === $value ? 'selected' : '' }}>{{ $label }}</option>
-                                                        @endforeach
-                                                    </select>
+                                                    @if($documentType === 'barcode')
+                                                        <input type="hidden" name="print_settings[barcode][orientation]" value="portrait">
+                                                        <span class="form-control form-control-sm bg-light">Portrait</span>
+                                                    @else
+                                                        <select name="print_settings[{{ $documentType }}][orientation]" class="form-control form-control-sm">
+                                                            @foreach($orientations as $value => $label)
+                                                                <option value="{{ $value }}" {{ old("print_settings.$documentType.orientation", $setting->orientation) === $value ? 'selected' : '' }}>{{ $label }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    @endif
                                                 </td>
                                                 <td>
                                                     <input type="number"
@@ -276,12 +292,18 @@
                                                            value="{{ old("print_settings.$documentType.scale", $setting->scale) }}">
                                                 </td>
                                                 <td>
-                                                    <input type="number"
-                                                           name="print_settings[{{ $documentType }}][margin_mm]"
-                                                           min="0"
-                                                           max="50"
-                                                           class="form-control form-control-sm"
-                                                           value="{{ old("print_settings.$documentType.margin_mm", $setting->margin_mm) }}">
+                                                    @if($documentType === 'barcode')
+                                                        <input type="hidden" name="print_settings[barcode][margin_mm]" value="0">
+                                                        <input id="label_margin_mm" type="number" name="label_margin_mm" min="0" max="10" class="form-control form-control-sm" value="{{ old('label_margin_mm', $thermalLabelSettings['label_margin_mm']) }}" title="Label inner margin in millimetres" required>
+                                                        <small class="text-muted">Inner margin</small>
+                                                    @else
+                                                        <input type="number"
+                                                               name="print_settings[{{ $documentType }}][margin_mm]"
+                                                               min="0"
+                                                               max="50"
+                                                               class="form-control form-control-sm"
+                                                               value="{{ old("print_settings.$documentType.margin_mm", $setting->margin_mm) }}">
+                                                    @endif
                                                 </td>
                                                 <td class="align-middle text-center">
                                                     <div class="custom-control custom-switch">
@@ -295,23 +317,50 @@
                                                         <label class="custom-control-label" for="print_auto_{{ $documentType }}"></label>
                                                     </div>
                                                 </td>
+                                                <td>
+                                                    @if($documentType === 'service')
+                                                        <select name="print_settings[service][header_mode]" class="form-control form-control-sm">
+                                                            @foreach($printHeaderModes as $value => $label)
+                                                                <option value="{{ $value }}" @selected(old('print_settings.service.header_mode', $setting->header_mode ?? 'full') === $value)>{{ $label }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    @else
+                                                        <span class="text-muted">&mdash;</span>
+                                                    @endif
+                                                </td>
                                             </tr>
                                         @endforeach
                                     </tbody>
                                 </table>
                             </div>
 
-                            <small class="form-text text-muted">Scale and margins are applied by both printing methods. Disable Auto Print to preview a document before sending it to Hubix. Printer mappings are maintained per computer below.</small>
+                            <small class="form-text text-muted">Barcode label dimensions are configured directly in its profile row. Disable Auto Print to preview a document before sending it to Hubix. Printer mappings are maintained per computer below.</small>
 
                             <h5 class="mt-4">Local Print Agents</h5>
                             <hr>
+
+                            @php $boundPrintAgent = $printAgents->firstWhere('uuid', $boundPrintAgentUuid); @endphp
+                            @if($boundPrintAgent)
+                                <div class="alert alert-success py-2">
+                                    This browser prints through <strong>{{ $boundPrintAgent->name }}</strong>.
+                                    <button type="submit" form="unbind-print-agent-browser-form" class="btn btn-sm btn-outline-danger ml-2">Unlink this browser</button>
+                                </div>
+                            @elseif($boundPrintAgentUuid)
+                                <div class="alert alert-warning py-2">
+                                    This browser's previous print agent no longer exists. Link an agent below or use browser printing.
+                                </div>
+                            @else
+                                <div class="alert alert-warning py-2">
+                                    This browser is not linked to a local print agent. Local-agent documents will offer browser printing instead.
+                                </div>
+                            @endif
 
                             @if(file_exists(public_path('downloads/HubixPrintAgent-win-x64.zip')))
                                 <p>
                                     <a class="btn btn-sm btn-success" href="{{ asset('downloads/HubixPrintAgent-win-x64.zip') }}" download>
                                         <i class="fas fa-download"></i> Download Windows Print Agent
                                     </a>
-                                    <small class="text-muted ml-2">Extract the ZIP and keep all files together on the billing computer.</small>
+                                    <small class="text-muted ml-2">Version 1.0.3. Extract the ZIP and keep all files together on the billing computer.</small>
                                 </p>
                             @endif
 
@@ -344,7 +393,7 @@
                                     <div class="card-header d-flex justify-content-between align-items-center py-2">
                                         <div>
                                             <strong>{{ $agent->name }}</strong>
-                                            @if($agent->is_default)<span class="badge badge-primary ml-1">Default</span>@endif
+                                            @if($agent->uuid === $boundPrintAgentUuid)<span class="badge badge-primary ml-1">This browser</span>@endif
                                             <span class="badge {{ $agent->isOnline() ? 'badge-success' : 'badge-secondary' }} ml-1">
                                                 {{ $agent->isOnline() ? 'Online' : 'Offline' }}
                                             </span>
@@ -396,9 +445,9 @@
                                         <button type="submit" form="print-agent-{{ $agent->id }}-form" class="btn btn-sm btn-primary">Save Agent</button>
                                         <button type="submit" form="print-agent-{{ $agent->id }}-pair-form" class="btn btn-sm btn-outline-warning">Pair Again</button>
                                         <button type="submit" form="print-agent-{{ $agent->id }}-test-form" class="btn btn-sm btn-outline-success">Print Test</button>
-                                        @unless($agent->is_default)
-                                            <button type="submit" form="print-agent-{{ $agent->id }}-default-form" class="btn btn-sm btn-outline-secondary">Make Default</button>
-                                        @endunless
+                                        @if($agent->uuid !== $boundPrintAgentUuid)
+                                            <button type="submit" form="print-agent-{{ $agent->id }}-bind-form" class="btn btn-sm btn-outline-secondary">Use on this browser</button>
+                                        @endif
                                     </div>
                                 </div>
                             @empty
@@ -407,7 +456,7 @@
                         </div>
 
                         <div class="tab-pane fade" id="barcode-settings" role="tabpanel" aria-labelledby="barcode-tab">
-                            <h5>Inventory Label Details</h5>
+                            <h5>Barcode / QR Label Content</h5>
                             <hr>
 
                             <div class="alert alert-info py-2">
@@ -451,30 +500,6 @@
                                 <span class="d-block text-muted mt-1">Example: 1234.50 is displayed as KVMO.UX. Stored prices and encoded barcode/QR values are unchanged.</span>
                             </div>
 
-                            <h5 class="mt-4">Thermal Printer Label</h5>
-                            <hr>
-                            <div class="alert alert-secondary py-2">
-                                Barcode and QR print pages output one label per page using these exact thermal-paper dimensions. Select the matching thermal printer and label stock in the browser print dialog.
-                            </div>
-                            <div class="form-row">
-                                <div class="col-md-4 form-group">
-                                    <label for="label_width_mm">Label width (mm)</label>
-                                    <input id="label_width_mm" type="number" name="label_width_mm" min="20" max="150" class="form-control" value="{{ old('label_width_mm', $thermalLabelSettings['label_width_mm']) }}" required>
-                                </div>
-                                <div class="col-md-4 form-group">
-                                    <label for="label_height_mm">Label height (mm)</label>
-                                    <input id="label_height_mm" type="number" name="label_height_mm" min="15" max="150" class="form-control" value="{{ old('label_height_mm', $thermalLabelSettings['label_height_mm']) }}" required>
-                                </div>
-                                <div class="col-md-4 form-group">
-                                    <label for="label_margin_mm">Inner margin (mm)</label>
-                                    <input id="label_margin_mm" type="number" name="label_margin_mm" min="0" max="10" class="form-control" value="{{ old('label_margin_mm', $thermalLabelSettings['label_margin_mm']) }}" required>
-                                </div>
-                            </div>
-                            <input type="hidden" name="label_auto_print" value="0">
-                            <div class="custom-control custom-switch">
-                                <input type="checkbox" class="custom-control-input" id="label_auto_print" name="label_auto_print" value="1" @checked((bool) old('label_auto_print', $thermalLabelSettings['auto_print']))>
-                                <label class="custom-control-label" for="label_auto_print">Open the print dialog automatically</label>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -487,11 +512,12 @@
         </form>
 
         <form id="new-print-agent-form" method="POST" action="{{ route('print-agents.store') }}">@csrf</form>
+        <form id="unbind-print-agent-browser-form" method="POST" action="{{ route('print-agents.unbind-browser') }}">@csrf @method('DELETE')</form>
         @foreach($printAgents as $agent)
             <form id="print-agent-{{ $agent->id }}-form" method="POST" action="{{ route('print-agents.update', $agent) }}">@csrf @method('PUT')</form>
             <form id="print-agent-{{ $agent->id }}-pair-form" method="POST" action="{{ route('print-agents.pairing-code', $agent) }}">@csrf</form>
             <form id="print-agent-{{ $agent->id }}-test-form" method="POST" action="{{ route('print-agents.test', $agent) }}">@csrf</form>
-            <form id="print-agent-{{ $agent->id }}-default-form" method="POST" action="{{ route('print-agents.default', $agent) }}">@csrf</form>
+            <form id="print-agent-{{ $agent->id }}-bind-form" method="POST" action="{{ route('print-agents.bind-browser', $agent) }}">@csrf</form>
         @endforeach
     </div>
 </div>

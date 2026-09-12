@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Modules\Settings\app\Models\LocalPrintJob;
+use Modules\Settings\app\Models\BarcodeSetting;
 use Modules\Settings\app\Models\PrintAgent;
 use Modules\Settings\app\Models\PrintAgentPrinterMapping;
 use Modules\Settings\app\Models\PrintSetting;
@@ -153,6 +154,7 @@ class PrintAgentApiController extends Controller
 
         $settingType = $job->document_type === 'test' ? 'sale' : $job->document_type;
         $setting = PrintSetting::forDocument($settingType);
+        $thermalSettings = $job->document_type === 'barcode' ? BarcodeSetting::thermalSettings() : null;
 
         return response()->json([
             'job_id' => $job->uuid,
@@ -161,10 +163,12 @@ class PrintAgentApiController extends Controller
             'printer_name' => $mapping->printer_name,
             'copies' => $job->copies,
             'settings' => [
-                'paper_size' => $setting->paper_size,
-                'orientation' => $setting->orientation,
+                'paper_size' => $thermalSettings ? 'custom' : $setting->paper_size,
+                'orientation' => $thermalSettings ? 'portrait' : $setting->orientation,
                 'scale' => $setting->scale,
-                'margin_mm' => $setting->margin_mm,
+                'margin_mm' => $thermalSettings ? 0 : $setting->margin_mm,
+                'page_width_mm' => $thermalSettings['label_width_mm'] ?? null,
+                'page_height_mm' => $thermalSettings['label_height_mm'] ?? null,
             ],
         ]);
     }

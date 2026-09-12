@@ -136,13 +136,10 @@
 
       <td>
         <b>Estimation Date: </b>{{ \Carbon\Carbon::parse($estimation->es_date)->format('d/m/Y') }}<br><br>
-        <b>Document Type: </b>Estimation<br><br>
-        <b>Account Effect: </b>{{ $estimation->es_account_effect ? 'Yes' : 'No' }}
       </td>
 
       <td>
         <b>Estimation No: </b>{{ $estimation->es_vno }}<br><br>
-        <b>User: </b>{{ $estimation->user?->user_name ?? '-' }}
       </td>
     </tr>
 

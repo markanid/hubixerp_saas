@@ -15,6 +15,7 @@ class PrintSetting extends Model
         'scale',
         'margin_mm',
         'auto_print',
+        'header_mode',
         'printer_name',
     ];
 
@@ -32,6 +33,7 @@ class PrintSetting extends Model
         'sale_return' => 'Sale Return',
         'purchase_return' => 'Purchase Return',
         'consumption' => 'Consumption',
+        'barcode' => 'Barcode / QR Labels',
     ];
 
     public const PAPER_SIZES = [
@@ -49,6 +51,11 @@ class PrintSetting extends Model
         'local_agent' => 'Hubix Local Print Agent',
     ];
 
+    public const HEADER_MODES = [
+        'full' => 'Display all',
+        'compact' => 'Date, number and remark only',
+    ];
+
     public static function defaultsFor(string $documentType): array
     {
         $defaults = [
@@ -58,6 +65,7 @@ class PrintSetting extends Model
             'scale' => 100,
             'margin_mm' => 10,
             'auto_print' => true,
+            'header_mode' => 'full',
             'printer_name' => null,
         ];
 
@@ -65,6 +73,11 @@ class PrintSetting extends Model
             $defaults['paper_size'] = 'A5';
             $defaults['scale'] = 90;
             $defaults['margin_mm'] = 6;
+        }
+
+        if ($documentType === 'barcode') {
+            $defaults['orientation'] = 'portrait';
+            $defaults['margin_mm'] = 0;
         }
 
         return array_merge(['document_type' => $documentType], $defaults);

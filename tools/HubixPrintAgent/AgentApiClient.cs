@@ -135,4 +135,4 @@ internal sealed class AgentApiClient : IDisposable
 internal sealed record PairResponse(string AgentId, string AgentName, string Token, int PollSeconds, int HeartbeatSeconds);
 internal sealed record ApiError(string Message);
 internal sealed record PrintJob(string JobId, string ClaimToken, string RenderUrl, string PrinterName, int Copies, PrintJobSettings Settings);
-internal sealed record PrintJobSettings(string PaperSize, string Orientation, int Scale, int MarginMm);
+internal sealed record PrintJobSettings(string PaperSize, string Orientation, int Scale, int MarginMm, double? PageWidthMm, double? PageHeightMm);

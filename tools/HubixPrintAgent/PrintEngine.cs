@@ -78,7 +78,12 @@ internal sealed class PrintEngine
             settings.ShouldPrintHeaderAndFooter = false;
             settings.Copies = Math.Clamp(job.Copies, 1, 20);
 
-            if (string.Equals(job.Settings.PaperSize, "A5", StringComparison.OrdinalIgnoreCase))
+            if (job.Settings.PageWidthMm is > 0 && job.Settings.PageHeightMm is > 0)
+            {
+                settings.PageWidth = job.Settings.PageWidthMm.Value / 25.4d;
+                settings.PageHeight = job.Settings.PageHeightMm.Value / 25.4d;
+            }
+            else if (string.Equals(job.Settings.PaperSize, "A5", StringComparison.OrdinalIgnoreCase))
             {
                 settings.PageWidth = 5.83;
                 settings.PageHeight = 8.27;

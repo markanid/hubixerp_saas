@@ -24,7 +24,8 @@
             createUrl: @json(route('local-print-jobs.store')),
             csrfToken: @json(csrf_token()),
             documentType: @json($documentType),
-            documentId: @json((int) $documentId),
+            documentId: @json(isset($documentId) && $documentId !== null ? (int) $documentId : null),
+            payload: @json($printPayload ?? null),
             autoPrint: @json((bool) ($printSetting->auto_print ?? true))
         };
     </script>

@@ -83,6 +83,8 @@
           $showTax = (bool) ($collectTax ?? true) && (string) ($service->sv_type ?? '1') !== '0';
           $invoiceTitle = ($isComposition ?? false) ? 'BILL OF SUPPLY' : ($showTax ? 'TAX INVOICE' : 'INVOICE');
           $invoiceType = (string) ($service->sv_type ?? '1') === '2' ? 'B2B' : ((string) ($service->sv_type ?? '1') === '0' ? 'Legacy No '.$taxLabel : 'B2C');
+          $compactServiceHeader = ($printSetting->header_mode ?? 'full') === 'compact';
+          $state = $states->firstWhere('state_code', $service->sv_state_code);
          $serviceItems = collect($serviceItems ?? []);
          $saleItems = collect($saleItems ?? []);
          $hasServiceItems = $serviceItems->isNotEmpty();
@@ -127,23 +129,7 @@
                      Email : {{ $company->email }}<br>
                      {{ $taxNumberLabel }} : {{ $company->gst_no }}
                   </td>
-                  <td>
-                     <b>Invoice Type :</b> {{ $invoiceType }}<br><br>
-                     <b>Invoice Date :</b>
-                     {{ \Carbon\Carbon::parse($service->sv_date)->format('d/m/Y') }}<br><br>
-                    @php
-                        $state = $states->firstWhere('state_code', $service->sv_state_code);
-                    @endphp
-                    @if(!$isVat && $showTax)
-                    <b>State: </b>{{ $state ? $state->state_name : '-' }}<br>
-                    <b>Code: </b>{{ $state ? $state->state_code : '-' }}
-                    @endif
-                  </td>
-                  <td>
-                    <b>Invoice No :</b>{{ $service->sv_vno }}<br><br>
-                    <b>{{ $isVat ? 'E-Invoice' : 'E-way Bill No' }}: </b>{{ $service->sv_eway_bill_no ?? '-' }}<br><br>
-                    <b>Vehicle :</b>{{ $service->sv_vehicle }}
-                  </td>
+                   @include('service::services.partials.print-invoice-metadata')
                </tr>
                <tr>
                   <td colspan="2">

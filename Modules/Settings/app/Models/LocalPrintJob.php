@@ -17,7 +17,7 @@ class LocalPrintJob extends Model
     protected $fillable = [
         'uuid', 'print_agent_id', 'document_type', 'document_id', 'status',
         'copies', 'requested_by', 'claim_token_hash', 'claimed_at',
-        'printed_at', 'expires_at', 'error',
+        'printed_at', 'expires_at', 'error', 'request_ip', 'request_user_agent', 'payload',
     ];
 
     protected $hidden = ['claim_token_hash'];
@@ -26,6 +26,7 @@ class LocalPrintJob extends Model
         'claimed_at' => 'datetime',
         'printed_at' => 'datetime',
         'expires_at' => 'datetime',
+        'payload' => 'array',
     ];
 
     public function agent(): BelongsTo

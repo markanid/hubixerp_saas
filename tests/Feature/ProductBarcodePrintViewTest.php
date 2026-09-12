@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use Modules\Product\app\Models\Product;
+use Modules\Settings\app\Models\PrintSetting;
 use Tests\TestCase;
 
 class ProductBarcodePrintViewTest extends TestCase
@@ -116,5 +117,47 @@ class ProductBarcodePrintViewTest extends TestCase
             $this->assertStringContainsString('1,500.00', $html);
             $this->assertStringContainsString('1,400.00', $html);
         }
+    }
+
+    public function test_barcode_view_queues_payload_through_hubix_without_browser_auto_print(): void
+    {
+        $product = new Product();
+        $product->forceFill([
+            'id' => 25,
+            'product_code' => 'PRD_025',
+            'product' => 'Hubix Label',
+            'bar_code' => '1234567890',
+        ]);
+        $printSetting = new PrintSetting(array_merge(
+            PrintSetting::defaultsFor('barcode'),
+            ['print_method' => 'local_agent', 'auto_print' => true]
+        ));
+
+        $html = view('product::products.barcode-print', [
+            'product' => $product,
+            'codeType' => 'barcode',
+            'barcodeFieldLabels' => ['product_code' => 'Product Code'],
+            'thermalSettings' => [
+                'label_width_mm' => 60,
+                'label_height_mm' => 40,
+                'label_margin_mm' => 2,
+                'auto_print' => true,
+            ],
+            'currencySymbol' => 'Rs.',
+            'maskPurchasePrice' => false,
+            'page_title' => 'Print Barcode',
+            'printSetting' => $printSetting,
+            'printPayload' => [
+                'source' => 'products',
+                'ids' => [25],
+                'code_type' => 'barcode',
+                'layout' => 'single',
+            ],
+        ])->render();
+
+        $this->assertStringContainsString('Print with Hubix', $html);
+        $this->assertStringContainsString('documentType: "barcode"', $html);
+        $this->assertStringContainsString('"ids":[25]', $html);
+        $this->assertStringNotContainsString('onload="window.print();"', $html);
     }
 }

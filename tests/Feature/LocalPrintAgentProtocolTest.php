@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -10,6 +11,7 @@ use Modules\Settings\app\Models\LocalPrintJob;
 use Modules\Settings\app\Models\PrintAgent;
 use Modules\Settings\app\Models\PrintAgentPrinterMapping;
 use Modules\Settings\app\Models\PrintSetting;
+use Modules\Settings\app\Services\PrintDocumentRenderer;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 use Tests\TestCase;
@@ -59,9 +61,12 @@ class LocalPrintAgentProtocolTest extends TestCase
             $table->unsignedBigInteger('print_agent_id');
             $table->string('document_type');
             $table->unsignedBigInteger('document_id')->nullable();
+            $table->json('payload')->nullable();
             $table->string('status');
             $table->unsignedSmallInteger('copies')->default(1);
             $table->unsignedBigInteger('requested_by')->nullable();
+            $table->string('request_ip')->nullable();
+            $table->string('request_user_agent', 500)->nullable();
             $table->string('claim_token_hash')->nullable();
             $table->timestamp('claimed_at')->nullable();
             $table->timestamp('printed_at')->nullable();
@@ -78,7 +83,18 @@ class LocalPrintAgentProtocolTest extends TestCase
             $table->unsignedSmallInteger('scale')->default(100);
             $table->unsignedSmallInteger('margin_mm')->default(10);
             $table->boolean('auto_print')->default(true);
+            $table->string('header_mode')->default('full');
             $table->string('printer_name')->nullable();
+            $table->timestamps();
+        });
+        Schema::create('barcode_settings', function (Blueprint $table) {
+            $table->id();
+            $table->string('context')->unique();
+            $table->json('selected_fields')->nullable();
+            $table->unsignedSmallInteger('label_width_mm')->default(80);
+            $table->unsignedSmallInteger('label_height_mm')->default(40);
+            $table->unsignedSmallInteger('label_margin_mm')->default(2);
+            $table->boolean('auto_print')->default(true);
             $table->timestamps();
         });
     }
@@ -154,5 +170,95 @@ class LocalPrintAgentProtocolTest extends TestCase
         $this->assertStringContainsString('Print with Hubix', $manualHtml);
         $this->assertStringContainsString('autoPrint: false', $manualHtml);
         $this->assertStringContainsString('autoPrint: true', $automaticHtml);
+    }
+
+    public function test_barcode_job_uses_the_browser_bound_agent_and_custom_label_size(): void
+    {
+        $token = 'barcode-agent-token';
+        $agent = PrintAgent::create([
+            'uuid' => (string) Str::uuid(),
+            'name' => 'Label Counter',
+            'version' => '1.0.3',
+            'token_hash' => hash('sha256', $token),
+            'enabled' => true,
+            'printers' => ['Zebra Label Printer'],
+            'last_seen_at' => now(),
+        ]);
+        PrintAgentPrinterMapping::create([
+            'print_agent_id' => $agent->id,
+            'document_type' => 'barcode',
+            'printer_name' => 'Zebra Label Printer',
+        ]);
+        PrintSetting::create(array_merge(PrintSetting::defaultsFor('barcode'), ['print_method' => 'local_agent']));
+        DB::table('barcode_settings')->insert([
+            'context' => 'inventory',
+            'selected_fields' => '[]',
+            'label_width_mm' => 60,
+            'label_height_mm' => 30,
+            'label_margin_mm' => 2,
+            'auto_print' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $payload = [
+            'source' => 'products',
+            'ids' => [12, 18],
+            'code_type' => 'barcode',
+            'layout' => 'sheet',
+        ];
+        $renderer = $this->mock(PrintDocumentRenderer::class);
+        $renderer->shouldReceive('documentExists')->once()->with('barcode', null, $payload)->andReturnTrue();
+
+        $user = new User();
+        $user->forceFill(['id' => 77, 'email' => 'printer@example.test']);
+        $created = $this->actingAs($user)
+            ->withCredentials()
+            ->withCookie(PrintAgent::BROWSER_COOKIE, $agent->uuid)
+            ->postJson(route('local-print-jobs.store'), [
+                'document_type' => 'barcode',
+                'document_id' => null,
+                'payload' => $payload,
+                'copies' => 1,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('agent', 'Label Counter');
+
+        $job = LocalPrintJob::query()->where('uuid', $created->json('job_id'))->firstOrFail();
+        $this->assertSame($agent->id, $job->print_agent_id);
+        $this->assertEquals($payload, $job->payload);
+
+        $this->withToken($token)
+            ->getJson(route('api.print-agent.jobs.next'))
+            ->assertOk()
+            ->assertJsonPath('printer_name', 'Zebra Label Printer')
+            ->assertJsonPath('settings.paper_size', 'custom')
+            ->assertJsonPath('settings.page_width_mm', 60)
+            ->assertJsonPath('settings.page_height_mm', 30);
+    }
+
+    public function test_unbound_browser_cannot_queue_a_barcode_job(): void
+    {
+        PrintSetting::create(array_merge(PrintSetting::defaultsFor('barcode'), ['print_method' => 'local_agent']));
+        $payload = [
+            'source' => 'products',
+            'ids' => [12],
+            'code_type' => 'barcode',
+            'layout' => 'single',
+        ];
+        $renderer = $this->mock(PrintDocumentRenderer::class);
+        $renderer->shouldReceive('documentExists')->once()->with('barcode', null, $payload)->andReturnTrue();
+
+        $user = new User();
+        $user->forceFill(['id' => 78, 'email' => 'remote@example.test']);
+        $this->actingAs($user)
+            ->postJson(route('local-print-jobs.store'), [
+                'document_type' => 'barcode',
+                'payload' => $payload,
+            ])
+            ->assertStatus(409)
+            ->assertJsonPath('fallback', 'browser');
+
+        $this->assertDatabaseCount('local_print_jobs', 0);
     }
 }

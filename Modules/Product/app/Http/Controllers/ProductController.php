@@ -22,6 +22,7 @@ use Modules\Product\app\Services\BatchInventoryService;
 use Modules\Product\app\Services\InventoryLabelService;
 use Modules\Settings\app\Models\Company;
 use Modules\Settings\app\Models\BarcodeSetting;
+use Modules\Settings\app\Models\PrintSetting;
 use Picqer\Barcode\BarcodeGeneratorPNG;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
@@ -305,15 +306,7 @@ class ProductController extends Controller
             );
         }
 
-        return view('product::products.barcode-sheet', [
-            'products' => $products,
-            'codeType' => $codeType,
-            'barcodeFieldLabels' => $this->barcodeFieldLabels(),
-            'thermalSettings' => BarcodeSetting::thermalSettings(),
-            'currencySymbol' => Company::query()->value('currency_symbol') ?: 'Rs.',
-            'maskPurchasePrice' => BarcodeSetting::purchasePriceMaskEnabled(),
-            'page_title' => $codeType === 'qr' ? 'Print QR Codes' : 'Print Barcodes',
-        ]);
+        return $this->productLabelSheetPrintView($products, $codeType);
     }
 
     public function inventoryBarcode(InventoryLabel $label)
@@ -407,8 +400,27 @@ class ProductController extends Controller
         );
     }
 
-    private function inventoryLabelRowsPrintView($rows, string $codeType, string $backUrl, string $pageTitle)
+    private function inventoryLabelRowsPrintView($rows, string $codeType, string $backUrl, string $pageTitle, bool $printAgentRender = false)
     {
+        $rows = collect($rows)->values();
+
+        if ($printAgentRender) {
+            $barcodeGenerator = new BarcodeGeneratorPNG();
+            $rows = $rows->map(function (array $row) use ($barcodeGenerator, $codeType) {
+                $barcode = (string) $row['label']->barcode;
+                if (in_array($codeType, ['barcode', 'both'], true)) {
+                    $image = $barcodeGenerator->getBarcode($barcode, $barcodeGenerator::TYPE_CODE_128, 2, 65);
+                    $row['barcode_image_src'] = 'data:image/png;base64,'.base64_encode($image);
+                }
+                if (in_array($codeType, ['qr', 'both'], true)) {
+                    $image = QrCode::format('png')->size(220)->margin(1)->generate($barcode);
+                    $row['qr_image_src'] = 'data:image/png;base64,'.base64_encode((string) $image);
+                }
+
+                return $row;
+            });
+        }
+
         return view('product::products.inventory-label-print', [
             'rows' => $rows,
             'codeType' => $codeType,
@@ -418,6 +430,14 @@ class ProductController extends Controller
             'maskPurchasePrice' => BarcodeSetting::purchasePriceMaskEnabled(),
             'backUrl' => $backUrl,
             'page_title' => $pageTitle,
+            'printAgentRender' => $printAgentRender,
+            'printSetting' => PrintSetting::forDocument('barcode'),
+            'printPayload' => [
+                'source' => 'inventory_labels',
+                'ids' => $rows->pluck('label.id')->map(fn ($id) => (int) $id)->values()->all(),
+                'code_type' => $codeType,
+                'layout' => 'sheet',
+            ],
         ]);
     }
 
@@ -439,6 +459,69 @@ class ProductController extends Controller
             'currencySymbol' => Company::query()->value('currency_symbol') ?: 'Rs.',
             'maskPurchasePrice' => BarcodeSetting::purchasePriceMaskEnabled(),
             'page_title' => $codeType === 'qr' ? 'Print QR Code' : 'Print Barcode',
+            'printSetting' => PrintSetting::forDocument('barcode'),
+            'printPayload' => [
+                'source' => 'products',
+                'ids' => [(int) $product->id],
+                'code_type' => $codeType,
+                'layout' => 'single',
+            ],
+        ]);
+    }
+
+    public function renderBarcodePrintJob(array $payload)
+    {
+        $ids = array_values(array_unique(array_map('intval', $payload['ids'] ?? [])));
+        $codeType = in_array($payload['code_type'] ?? null, ['barcode', 'qr', 'both'], true)
+            ? $payload['code_type']
+            : 'barcode';
+
+        if (($payload['source'] ?? null) === 'products') {
+            $products = Product::query()->whereIn('id', $ids)->orderBy('product')->get();
+            abort_unless($products->count() === count($ids), 404);
+
+            if (($payload['layout'] ?? 'sheet') === 'single' && $products->count() === 1) {
+                return $this->productLabelPrintView($products->first(), $codeType);
+            }
+
+            return $this->productLabelSheetPrintView($products, $codeType);
+        }
+
+        abort_unless(($payload['source'] ?? null) === 'inventory_labels', 404);
+        $labelsById = InventoryLabel::query()->with('product')->whereIn('id', $ids)->get()->keyBy('id');
+        abort_unless($labelsById->count() === count($ids) && $labelsById->every(fn (InventoryLabel $label) => $label->product !== null), 404);
+        $labels = collect($ids)->map(fn (int $id) => $labelsById->get($id));
+
+        $rows = $labels->map(fn (InventoryLabel $label) => $this->inventoryLabels->slotDetails($label, $label->product));
+
+        return $this->inventoryLabelRowsPrintView(
+            $rows,
+            $codeType,
+            route('products.index'),
+            $codeType === 'qr' ? 'Print Inventory QR Codes' : ($codeType === 'barcode' ? 'Print Inventory Barcodes' : 'Print Inventory Labels'),
+            true
+        );
+    }
+
+    private function productLabelSheetPrintView($products, string $codeType)
+    {
+        $products = collect($products)->values();
+
+        return view('product::products.barcode-sheet', [
+            'products' => $products,
+            'codeType' => $codeType,
+            'barcodeFieldLabels' => $this->barcodeFieldLabels(),
+            'thermalSettings' => BarcodeSetting::thermalSettings(),
+            'currencySymbol' => Company::query()->value('currency_symbol') ?: 'Rs.',
+            'maskPurchasePrice' => BarcodeSetting::purchasePriceMaskEnabled(),
+            'page_title' => $codeType === 'qr' ? 'Print QR Codes' : 'Print Barcodes',
+            'printSetting' => PrintSetting::forDocument('barcode'),
+            'printPayload' => [
+                'source' => 'products',
+                'ids' => $products->pluck('id')->map(fn ($id) => (int) $id)->values()->all(),
+                'code_type' => $codeType,
+                'layout' => 'sheet',
+            ],
         ]);
     }
 

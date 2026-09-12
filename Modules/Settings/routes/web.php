@@ -31,13 +31,17 @@ Route::group(['middleware'=>'auth'],function(){
     Route::get('/company/settings', [CompanyController::class, 'settings'])->name("company.settings");
     Route::post('/company/settings/update', [CompanyController::class, 'updateSettings'])->name("company.settings.update");
     Route::get('/company/delete', [CompanyController::class, 'destroy'])->name("company.delete");
-    Route::post('/local-print-jobs', [LocalPrintJobController::class, 'store'])->name('local-print-jobs.store');
+    Route::post('/local-print-jobs', [LocalPrintJobController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('local-print-jobs.store');
     Route::get('/local-print-jobs/{localPrintJob}', [LocalPrintJobController::class, 'show'])->name('local-print-jobs.show');
     Route::middleware('can:sale.settings')->group(function () {
         Route::post('/print-agents', [PrintAgentController::class, 'store'])->name('print-agents.store');
         Route::post('/print-agents/{printAgent}/pairing-code', [PrintAgentController::class, 'refreshPairing'])->name('print-agents.pairing-code');
         Route::put('/print-agents/{printAgent}', [PrintAgentController::class, 'update'])->name('print-agents.update');
         Route::post('/print-agents/{printAgent}/default', [PrintAgentController::class, 'makeDefault'])->name('print-agents.default');
+        Route::post('/print-agents/{printAgent}/bind-browser', [PrintAgentController::class, 'bindBrowser'])->name('print-agents.bind-browser');
+        Route::delete('/print-agent-browser-binding', [PrintAgentController::class, 'unbindBrowser'])->name('print-agents.unbind-browser');
         Route::post('/print-agents/{printAgent}/test', [PrintAgentController::class, 'test'])->name('print-agents.test');
     });
 
