@@ -18,7 +18,7 @@ class StockLedger extends Model
 
     public function product()
     {
-        return $this->belongsTo(Product::class, 'product_code');
+        return $this->belongsTo(Product::class, 'stock_item_id', 'product_code');
     }
 
     public static function updateStockLedger($date, $itemId, $qty, $refId = null, $trans_type)

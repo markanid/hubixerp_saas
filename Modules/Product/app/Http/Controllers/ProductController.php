@@ -18,8 +18,8 @@ use Modules\Product\app\Models\StockLedger;
 use Modules\Purchase\app\Models\PurchaseDetail;
 use Modules\Sale\app\Models\SaleDetail;
 use Modules\Service\app\Models\ServiceDetail;
-use Modules\Product\app\Services\BatchInventoryService;
 use Modules\Product\app\Services\InventoryLabelService;
+use Modules\Product\app\Services\ProductStockService;
 use Modules\Settings\app\Models\Company;
 use Modules\Settings\app\Models\BarcodeSetting;
 use Modules\Settings\app\Models\PrintSetting;
@@ -29,14 +29,38 @@ use SimpleSoftwareIO\QrCode\Facades\QrCode;
 class ProductController extends Controller
 {
     public function __construct(
-        private readonly BatchInventoryService $batchInventory,
-        private readonly InventoryLabelService $inventoryLabels
+        private readonly InventoryLabelService $inventoryLabels,
+        private readonly ProductStockService $productStock
     ) {
     }
 
     public function index($id = null)
     {
-        $products = Product::with(['stock', 'purchaseInDetails', 'saleInDetails', 'returnInDetails', 'serviceInDetails'])->latest('product_code')->get();
+        $inventoryMode = $this->productStock->inventoryMode();
+        $productQuery = Product::with([
+            'stock',
+            'purchaseInDetails',
+            'saleInDetails',
+            'returnInDetails',
+            'serviceInDetails',
+        ])->withCount('estimationInDetails')
+            ->selectSub(
+                StockLedger::query()
+                    ->selectRaw('COUNT(*)')
+                    ->whereColumn('stock_item_id', 'product.product_code'),
+                'stock_ledgers_count'
+            );
+
+        if ($inventoryMode === 'mrp') {
+            $productQuery->withSum('mrpStockLots as tracked_stock_qty', 'available_quantity');
+        } elseif ($inventoryMode === 'batch') {
+            $productQuery->withSum('stockBatches as tracked_stock_qty', 'available_quantity');
+        }
+
+        $products = $productQuery->latest('product_code')->get();
+        $products->each(function (Product $product) use ($inventoryMode): void {
+            $product->setAttribute('display_stock_qty', $this->productStock->displayQuantity($product, $inventoryMode));
+        });
         if ($products!=null && !$products->isEmpty()) { 
             $data['products']   = $products;
             $data['page_title'] = "Products List";
@@ -52,12 +76,18 @@ class ProductController extends Controller
         $brands = Brand::select('id', 'brand')->get();
         $categories = Category::select('id', 'category')->get();
         $groups = Group::select('id', 'groups')->get();
-        $product    =  $id ? Product::with(['stock', 'purchaseInDetails', 'saleInDetails', 'returnInDetails', 'serviceInDetails'])->findOrFail($id) : new Product();
-        // $product    = $id ? Product::with('stock')->findOrFail($id) : new Product();
-        $stockQty = null;
-        if ($product->stock && $product->uqty) {
-            $stockQty = $product->stock->stock_qty / $product->uqty;
-        }
+        $product = $id ? Product::with([
+            'stock',
+            'stockBatches',
+            'mrpStockLots',
+            'purchaseInDetails',
+            'saleInDetails',
+            'returnInDetails',
+            'serviceInDetails',
+        ])->findOrFail($id) : new Product();
+        $inventoryMode = $this->productStock->inventoryMode();
+        $stockQty = $id ? $this->productStock->displayQuantity($product, $inventoryMode) : null;
+        $isUsed = $id ? $this->productHasTransactions($product) : false;
         $product_code = $id ? $product->product_code : Product::getProductCode();
 
         $data['page_title']     = $id ? "Edit Product" : "Create Product";
@@ -67,7 +97,11 @@ class ProductController extends Controller
         $data['stockQty']       = $stockQty;
         $data['groups']         = $groups;  
         $data['product_code']   = $product_code;
-        $data['batchMode']      = (Company::query()->value('inventory_mode') ?? 'standard') === 'batch';
+        $data['inventoryMode']  = $inventoryMode;
+        $data['batchMode']      = $inventoryMode === 'batch';
+        $data['isUsed']         = $isUsed;
+        $data['stockEditable']  = !$isUsed
+            && !$this->productStock->usesTrackedInventory($product, $inventoryMode);
 
         return view('product::products.create', $data);
     }
@@ -92,7 +126,7 @@ class ProductController extends Controller
             'pprice'            => 'nullable|numeric',
             'gst'               => 'nullable|numeric',
             'unit'              => 'nullable|string|max:255',
-            'uqty'              => 'nullable|numeric',
+            'uqty'              => 'required|numeric|gt:0',
             'maxquantity'       => 'nullable|numeric',
             'minquantity'       => 'nullable|numeric',
             'brandid'           => 'nullable|exists:brand,id',
@@ -112,6 +146,18 @@ class ProductController extends Controller
         $validatedData['is_batch_managed'] = $request->boolean('is_batch_managed');
         
         $isNew = empty($request->id);
+        $inventoryMode = $this->productStock->inventoryMode();
+        $wasTracked = $product
+            ? $this->productStock->usesTrackedInventory($product, $inventoryMode)
+            : false;
+        $hasTransactions = $product ? $this->productHasTransactions($product) : false;
+
+        if ($product && $hasTransactions) {
+            $validatedData['unit'] = $product->unit;
+            $validatedData['uqty'] = $product->uqty;
+            $validatedData['typeid'] = $product->typeid;
+            $validatedData['is_batch_managed'] = $product->is_batch_managed;
+        }
 
         if ($request->hasFile('product_image')) {
             if ($product && $product->product_image) {
@@ -138,11 +184,10 @@ class ProductController extends Controller
             generateQrCodeImage($qrContent, $validatedData);
         }
 
-        // Extract stock_qty before updating product
-        $uqty       = $validatedData['uqty'] ?? 0;
-        $stock      = $validatedData['stock_qty'] ?? 0;
-        $stockQty   = $uqty * $stock;
-        unset($validatedData['stock_qty']); // Remove from product data
+        $stockWasSubmitted = array_key_exists('stock_qty', $validatedData)
+            && $validatedData['stock_qty'] !== null;
+        $submittedStock = $stockWasSubmitted ? (float) $validatedData['stock_qty'] : null;
+        unset($validatedData['stock_qty']);
 
         $product = Product::updateOrCreate(
             ['id' => $request->id ?? null], 
@@ -156,7 +201,14 @@ class ProductController extends Controller
             Storage::disk('public')->delete("product_logos/qrcode_logos/{$oldQrCode}");
         }
 
-        if ($product && $product->typeid != 3 && !$this->batchInventory->enabled($product)) {
+        if ($product && $this->productStock->canApplyDirectAdjustment(
+            $product,
+            $inventoryMode,
+            $wasTracked,
+            $hasTransactions,
+            $stockWasSubmitted
+        )) {
+            $stockQty = (float) $product->uqty * $submittedStock;
             $stockModel = Stock::firstOrNew(['stock_product_id' => $product->product_code]);
             $existingQty = $stockModel->exists ? $stockModel->stock_qty : 0;
             
@@ -202,7 +254,7 @@ class ProductController extends Controller
     public function show($id)
     {
         $product = Product::with(['stock', 'stockBatches', 'mrpStockLots'])->findOrFail($id);
-        $inventoryMode = Company::query()->value('inventory_mode') ?? 'standard';
+        $inventoryMode = $this->productStock->inventoryMode();
         $purchases  = PurchaseDetail::getProductPurchaseSummaryBySupplier($product->product_code)->keyBy('pu_vendor');
         $sales_summary = SaleDetail::getProductSaleSummaryByCustomer($product->product_code);
         $services_summary = ServiceDetail::getProductServiceSummaryByCustomer($product->product_code);
@@ -238,12 +290,7 @@ class ProductController extends Controller
 
         $data['page_title'] = "View Product";
         $data['product']    = $product;
-        $rawStock = $inventoryMode === 'mrp'
-            ? $product->mrpStockLots->sum('available_quantity')
-            : ($inventoryMode === 'batch' && $product->is_batch_managed
-                ? $product->stockBatches->sum('available_quantity')
-                : ($product->stock?->stock_qty ?? 0));
-        $data['stockQty']   = $rawStock / ($product->uqty ?: 1);
+        $data['stockQty']   = $this->productStock->displayQuantity($product, $inventoryMode);
         $data['purchases']  = $purchases;
         $data['inventoryMode'] = $inventoryMode;
         $data['inventoryLabels'] = in_array($inventoryMode, ['mrp', 'batch'], true)
@@ -257,6 +304,35 @@ class ProductController extends Controller
         $data['currencySymbol'] = Company::query()->value('currency_symbol') ?: 'Rs.';
 
         return view('product::products.view',$data);
+    }
+
+    private function productHasTransactions(Product $product): bool
+    {
+        if (StockLedger::where('stock_item_id', $product->product_code)->exists()) {
+            return true;
+        }
+
+        foreach ([
+            'purchaseInDetails',
+            'saleInDetails',
+            'returnInDetails',
+            'serviceInDetails',
+            'estimationInDetails',
+        ] as $relation) {
+            if ($product->relationLoaded($relation)) {
+                if ($product->getRelation($relation)->isNotEmpty()) {
+                    return true;
+                }
+
+                continue;
+            }
+
+            if ($product->{$relation}()->exists()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function printBarcode($id)

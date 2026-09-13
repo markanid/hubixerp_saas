@@ -36,7 +36,7 @@
                             <span class="text-info font-weight-bold">{{ number_format($productsCount ?? 0) }}</span>
                         </span>
                         <span class="d-block text-xs">
-                            Stock Value:
+                            Stock MRP Value:
                             <span class="text-success font-weight-bold">{{ $currencySymbol ?? '₹' }} {{ number_format($stockValue ?? 0, 2) }}</span>
                         </span>
                     </div>

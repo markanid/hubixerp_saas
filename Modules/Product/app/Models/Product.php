@@ -54,7 +54,7 @@ class Product extends Model
     
     public function stockLedgers()
     {
-        return $this->hasMany(StockLedger::class, 'product_code');
+        return $this->hasMany(StockLedger::class, 'stock_item_id', 'product_code');
     }
 
     public function stockBatches()
@@ -86,7 +86,7 @@ class Product extends Model
     {
         return $this->hasMany(EstimationDetail::class, 'esd_itemid', 'product_code');
     }
-    
+
     public function returnInDetails()
     {
         return $this->hasMany(ReturnDetail::class, 'prd_itemid', 'product_code');

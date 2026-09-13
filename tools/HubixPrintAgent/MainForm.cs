@@ -8,11 +8,13 @@ internal sealed class MainForm : Form
     private readonly TextBox _serverUrl = new();
     private readonly TextBox _agentName = new();
     private readonly TextBox _pairingCode = new();
+    private readonly TextBox _browserLinkCode = new();
     private readonly CheckBox _startWithWindows = new();
     private readonly Label _status = new();
     private readonly ListBox _printers = new();
     private readonly Button _pairButton = new();
     private readonly Button _saveButton = new();
+    private readonly Button _browserLinkButton = new();
     private readonly NotifyIcon _tray = new();
     private readonly WebView2 _webView = new();
     private AgentSettings _settings;
@@ -57,7 +59,8 @@ internal sealed class MainForm : Form
 
     private void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(18), ColumnCount = 1, RowCount = 9 };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(18), ColumnCount = 1, RowCount = 10 };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -81,6 +84,12 @@ internal sealed class MainForm : Form
         _startWithWindows.Margin = new Padding(0, 8, 0, 8);
         root.Controls.Add(_startWithWindows);
 
+        _browserLinkCode.ReadOnly = true;
+        _browserLinkCode.CharacterCasing = CharacterCasing.Upper;
+        _browserLinkCode.Font = new Font(FontFamily.GenericMonospace, 12, FontStyle.Bold);
+        _browserLinkCode.PlaceholderText = "Generate a code after pairing";
+        root.Controls.Add(Field("Browser link code (valid for 10 minutes)", _browserLinkCode));
+
         var printerLabel = new Label { Text = "Printers reported to HubixERP", AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(0, 6, 0, 4) };
         root.Controls.Add(printerLabel);
         _printers.Dock = DockStyle.Fill;
@@ -93,10 +102,14 @@ internal sealed class MainForm : Form
         _saveButton.Text = "Save Settings";
         _saveButton.AutoSize = true;
         _saveButton.Click += SaveClicked;
+        _browserLinkButton.Text = "Generate Browser Link Code";
+        _browserLinkButton.AutoSize = true;
+        _browserLinkButton.Click += GenerateBrowserLinkCodeClicked;
         var refresh = new Button { Text = "Refresh Printers", AutoSize = true };
         refresh.Click += (_, _) => RefreshPrinters();
         actions.Controls.Add(_pairButton);
         actions.Controls.Add(_saveButton);
+        actions.Controls.Add(_browserLinkButton);
         actions.Controls.Add(refresh);
         root.Controls.Add(actions);
 
@@ -167,6 +180,7 @@ internal sealed class MainForm : Form
             _pairButton.Text = "Pair Again";
             SetStatus($"Paired as {_settings.AgentName}. Waiting for print jobs.", false);
             StartRunner();
+            await RefreshBrowserLinkCodeAsync();
         }
         catch (Exception ex)
         {
@@ -191,6 +205,37 @@ internal sealed class MainForm : Form
         _api.UpdateSettings(_settings);
         SetStatus("Settings saved.", false);
         if (_settings.IsPaired) StartRunner();
+    }
+
+    private async void GenerateBrowserLinkCodeClicked(object? sender, EventArgs e)
+    {
+        await RefreshBrowserLinkCodeAsync();
+    }
+
+    private async Task RefreshBrowserLinkCodeAsync()
+    {
+        if (!_settings.IsPaired)
+        {
+            MessageBox.Show("Pair this print agent before generating a browser link code.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        _browserLinkButton.Enabled = false;
+        try
+        {
+            var response = await _api.CreateBrowserLinkCodeAsync(CancellationToken.None);
+            _browserLinkCode.Text = response.Code;
+            SetStatus($"Browser link code generated. It expires at {response.ExpiresAt.LocalDateTime:t}.", false);
+        }
+        catch (Exception ex)
+        {
+            _browserLinkCode.Clear();
+            SetStatus($"Could not generate browser link code: {ex.Message}", true);
+        }
+        finally
+        {
+            _browserLinkButton.Enabled = true;
+        }
     }
 
     private bool TryReadUi(out AgentSettings settings)
@@ -333,6 +378,7 @@ internal sealed class MainForm : Form
     {
         _pairButton.Enabled = !busy;
         _saveButton.Enabled = !busy;
+        _browserLinkButton.Enabled = !busy;
         UseWaitCursor = busy;
     }
 
@@ -349,6 +395,7 @@ internal sealed class MainForm : Form
         Show();
         WindowState = FormWindowState.Normal;
         Activate();
+        if (_settings.IsPaired) _ = RefreshBrowserLinkCodeAsync();
     }
 
     private void OnFormClosing(object? sender, FormClosingEventArgs e)

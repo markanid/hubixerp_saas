@@ -40,7 +40,9 @@ Route::group(['middleware'=>'auth'],function(){
         Route::post('/print-agents/{printAgent}/pairing-code', [PrintAgentController::class, 'refreshPairing'])->name('print-agents.pairing-code');
         Route::put('/print-agents/{printAgent}', [PrintAgentController::class, 'update'])->name('print-agents.update');
         Route::post('/print-agents/{printAgent}/default', [PrintAgentController::class, 'makeDefault'])->name('print-agents.default');
-        Route::post('/print-agents/{printAgent}/bind-browser', [PrintAgentController::class, 'bindBrowser'])->name('print-agents.bind-browser');
+        Route::post('/print-agents/{printAgent}/bind-browser', [PrintAgentController::class, 'bindBrowser'])
+            ->middleware('throttle:10,1')
+            ->name('print-agents.bind-browser');
         Route::delete('/print-agent-browser-binding', [PrintAgentController::class, 'unbindBrowser'])->name('print-agents.unbind-browser');
         Route::post('/print-agents/{printAgent}/test', [PrintAgentController::class, 'test'])->name('print-agents.test');
     });

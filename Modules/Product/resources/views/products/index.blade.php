@@ -63,9 +63,8 @@
                                 @endphp
                                 @foreach($products as $row)
                                     @php
-                                        $currentStock = (optional($row->stock)->stock_qty ?? 0) / ($row->uqty ?: 1);
-                                        $hasStock = optional($row->stock)->stock_qty > 0;
-                                        $isUsed = $row->purchaseInDetails->isNotEmpty() || $row->saleInDetails->isNotEmpty() || $row->returnInDetails->isNotEmpty() || $row->serviceInDetails->isNotEmpty();
+                                        $currentStock = (float) $row->display_stock_qty;
+                                        $isUsed = $row->stock_ledgers_count > 0 || $row->estimation_in_details_count > 0 || $row->purchaseInDetails->isNotEmpty() || $row->saleInDetails->isNotEmpty() || $row->returnInDetails->isNotEmpty() || $row->serviceInDetails->isNotEmpty();
                                     @endphp
                                     <tr>
                                         <td>

@@ -12,7 +12,6 @@ use Illuminate\Validation\Rule;
 use Modules\Settings\app\Models\LocalPrintJob;
 use Modules\Settings\app\Models\BarcodeSetting;
 use Modules\Settings\app\Models\PrintAgent;
-use Modules\Settings\app\Models\PrintAgentPrinterMapping;
 use Modules\Settings\app\Models\PrintSetting;
 use Modules\Settings\app\Services\PrintDocumentRenderer;
 
@@ -76,27 +75,41 @@ class PrintAgentApiController extends Controller
             $defaultPrinter = null;
         }
 
-        DB::transaction(function () use ($agent, $validated, $printers, $defaultPrinter) {
-            $agent->update([
-                'machine_name' => $validated['machine_name'],
-                'version' => $validated['version'],
-                'printers' => $printers,
-                'default_printer' => $defaultPrinter,
-                'last_seen_at' => now(),
-                'last_error' => $validated['last_error'] ?? null,
-            ]);
-
-            if ($defaultPrinter && !$agent->mappings()->exists()) {
-                foreach (PrintSetting::DOCUMENTS as $documentType => $label) {
-                    PrintAgentPrinterMapping::updateOrCreate(
-                        ['print_agent_id' => $agent->id, 'document_type' => $documentType],
-                        ['printer_name' => $defaultPrinter]
-                    );
-                }
-            }
-        });
+        $agent->update([
+            'machine_name' => $validated['machine_name'],
+            'version' => $validated['version'],
+            'printers' => $printers,
+            'default_printer' => $defaultPrinter,
+            'last_seen_at' => now(),
+            'last_error' => $validated['last_error'] ?? null,
+        ]);
 
         return response()->json(['status' => 'ok', 'server_time' => now()->toIso8601String()]);
+    }
+
+    public function browserLinkCode(Request $request): JsonResponse
+    {
+        /** @var PrintAgent $agent */
+        $agent = $request->attributes->get('printAgent');
+        if (version_compare((string) $agent->version, PrintAgent::BROWSER_BINDING_MIN_VERSION, '<')) {
+            return response()->json([
+                'message' => 'Update Hubix Print Agent to v'.PrintAgent::BROWSER_BINDING_MIN_VERSION.' before linking a browser.',
+            ], 409);
+        }
+
+        $code = Str::upper(Str::random(8));
+        $expiresAt = now()->addMinutes(10);
+
+        $agent->update([
+            'browser_link_code_hash' => hash('sha256', $code),
+            'browser_link_expires_at' => $expiresAt,
+            'last_seen_at' => now(),
+        ]);
+
+        return response()->json([
+            'code' => $code,
+            'expires_at' => $expiresAt->toIso8601String(),
+        ]);
     }
 
     public function next(Request $request): JsonResponse

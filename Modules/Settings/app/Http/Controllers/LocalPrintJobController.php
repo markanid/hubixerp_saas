@@ -51,8 +51,9 @@ class LocalPrintJobController extends Controller
             return response()->json(['message' => 'This document is configured for browser printing.'], 409);
         }
 
-        $boundAgentUuid = (string) $request->cookie(PrintAgent::BROWSER_COOKIE, '');
-        if ($boundAgentUuid === '') {
+        $browserBinding = (string) $request->cookie(PrintAgent::BROWSER_COOKIE, '');
+        $bindingParts = PrintAgent::parseBrowserBinding($browserBinding);
+        if ($bindingParts === null) {
             return response()->json([
                 'message' => 'This browser is not linked to a Hubix print agent. Link it in Company Settings or use browser printing.',
                 'fallback' => 'browser',
@@ -60,7 +61,18 @@ class LocalPrintJobController extends Controller
         }
 
         $agent = PrintAgent::query()
-            ->where('uuid', $boundAgentUuid)
+            ->where('uuid', $bindingParts[0])
+            ->first();
+
+        if (!$agent?->matchesBrowserBinding($browserBinding)) {
+            return response()->json([
+                'message' => 'This browser print-agent link is no longer valid. Link this computer again in Company Settings.',
+                'fallback' => 'browser',
+            ], 409);
+        }
+
+        $agent = PrintAgent::query()
+            ->whereKey($agent->getKey())
             ->where('enabled', true)
             ->whereNotNull('token_hash')
             ->where('last_seen_at', '>=', now()->subMinutes(2))
@@ -101,7 +113,17 @@ class LocalPrintJobController extends Controller
             'status' => $job->status,
             'agent' => $agent->name,
             'status_url' => route('local-print-jobs.show', $job),
-        ], 201);
+        ], 201)->withCookie(cookie(
+            PrintAgent::BROWSER_COOKIE,
+            $browserBinding,
+            PrintAgent::BROWSER_BINDING_MINUTES,
+            '/',
+            null,
+            null,
+            true,
+            false,
+            'strict'
+        ));
     }
 
     public function show(Request $request, LocalPrintJob $localPrintJob): JsonResponse

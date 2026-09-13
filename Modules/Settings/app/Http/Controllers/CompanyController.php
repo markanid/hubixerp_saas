@@ -109,7 +109,10 @@ class CompanyController extends Controller
         $data['printAgents'] = Schema::hasTable('print_agents')
             ? PrintAgent::with('mappings')->orderByDesc('is_default')->orderBy('name')->get()
             : collect();
-        $data['boundPrintAgentUuid'] = (string) request()->cookie(PrintAgent::BROWSER_COOKIE, '');
+        $browserBinding = (string) request()->cookie(PrintAgent::BROWSER_COOKIE, '');
+        $data['boundPrintAgentUuid'] = $data['printAgents']
+            ->first(fn (PrintAgent $agent) => $agent->matchesBrowserBinding($browserBinding))
+            ?->uuid ?? '';
 
         return view('settings::company.settings', $data);
     }

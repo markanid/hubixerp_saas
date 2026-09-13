@@ -355,12 +355,16 @@
                                 </div>
                             @endif
 
+                            <div class="alert alert-info py-2">
+                                To link a browser securely, open Hubix Print Agent on that same computer, generate a Browser Link Code, and enter it beside that computer below. The code expires after 10 minutes and can be used once.
+                            </div>
+
                             @if(file_exists(public_path('downloads/HubixPrintAgent-win-x64.zip')))
                                 <p>
                                     <a class="btn btn-sm btn-success" href="{{ asset('downloads/HubixPrintAgent-win-x64.zip') }}" download>
                                         <i class="fas fa-download"></i> Download Windows Print Agent
                                     </a>
-                                    <small class="text-muted ml-2">Version 1.0.3. Extract the ZIP and keep all files together on the billing computer.</small>
+                                    <small class="text-muted ml-2">Version 1.0.4. Extract the ZIP and keep all files together on the billing computer.</small>
                                 </p>
                             @endif
 
@@ -446,7 +450,20 @@
                                         <button type="submit" form="print-agent-{{ $agent->id }}-pair-form" class="btn btn-sm btn-outline-warning">Pair Again</button>
                                         <button type="submit" form="print-agent-{{ $agent->id }}-test-form" class="btn btn-sm btn-outline-success">Print Test</button>
                                         @if($agent->uuid !== $boundPrintAgentUuid)
-                                            <button type="submit" form="print-agent-{{ $agent->id }}-bind-form" class="btn btn-sm btn-outline-secondary">Use on this browser</button>
+                                            <div class="input-group input-group-sm mt-2" style="max-width: 410px;">
+                                                <input type="text"
+                                                       name="browser_link_code"
+                                                       form="print-agent-{{ $agent->id }}-bind-form"
+                                                       class="form-control text-uppercase"
+                                                       minlength="8"
+                                                       maxlength="20"
+                                                       autocomplete="one-time-code"
+                                                       placeholder="Code shown on this computer's agent"
+                                                       required>
+                                                <div class="input-group-append">
+                                                    <button type="submit" form="print-agent-{{ $agent->id }}-bind-form" class="btn btn-outline-secondary">Use on this browser</button>
+                                                </div>
+                                            </div>
                                         @endif
                                     </div>
                                 </div>

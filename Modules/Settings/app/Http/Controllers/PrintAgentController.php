@@ -15,8 +15,6 @@ use Modules\Settings\app\Models\LocalPrintJob;
 
 class PrintAgentController extends Controller
 {
-    private const BROWSER_BINDING_MINUTES = 60 * 24 * 365;
-
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate(['name' => ['required', 'string', 'max:100']]);
@@ -50,6 +48,9 @@ class PrintAgentController extends Controller
             'pairing_expires_at' => now()->addMinutes(10),
             'paired_by' => request()->user()?->getAuthIdentifier(),
             'last_seen_at' => null,
+            'browser_link_code_hash' => null,
+            'browser_link_expires_at' => null,
+            'browser_binding_token_hash' => null,
         ]);
 
         return back()->with('success', "A new pairing code was created for {$printAgent->name}.")
@@ -108,16 +109,41 @@ class PrintAgentController extends Controller
         return back()->with('success', "{$printAgent->name} is now the default print agent.");
     }
 
-    public function bindBrowser(PrintAgent $printAgent): RedirectResponse
+    public function bindBrowser(Request $request, PrintAgent $printAgent): RedirectResponse
     {
-        if (!$printAgent->enabled || !$printAgent->token_hash) {
-            return back()->with('error', 'Pair and enable the print agent before linking this browser.');
+        $validated = $request->validate([
+            'browser_link_code' => ['required', 'string', 'min:8', 'max:20'],
+        ]);
+
+        if (!$printAgent->enabled || !$printAgent->token_hash || !$printAgent->isOnline()) {
+            return back()->with('error', 'The print agent must be paired, enabled, and online before linking this browser.');
         }
+
+        if (version_compare((string) $printAgent->version, PrintAgent::BROWSER_BINDING_MIN_VERSION, '<')) {
+            return back()->with('error', 'Update this computer to Hubix Print Agent v'.PrintAgent::BROWSER_BINDING_MIN_VERSION.' before linking its browser.');
+        }
+
+        $submittedCodeHash = hash('sha256', Str::upper(trim($validated['browser_link_code'])));
+        if (!$printAgent->browser_link_expires_at
+            || $printAgent->browser_link_expires_at->isPast()
+            || !$printAgent->browser_link_code_hash
+            || !hash_equals($printAgent->browser_link_code_hash, $submittedCodeHash)) {
+            return back()->withErrors([
+                'browser_link_code' => 'The browser link code is invalid or expired. Generate a new code on this computer\'s Hubix Print Agent.',
+            ]);
+        }
+
+        $browserBindingToken = bin2hex(random_bytes(32));
+        $printAgent->update([
+            'browser_link_code_hash' => null,
+            'browser_link_expires_at' => null,
+            'browser_binding_token_hash' => hash('sha256', $browserBindingToken),
+        ]);
 
         $binding = cookie(
             PrintAgent::BROWSER_COOKIE,
-            $printAgent->uuid,
-            self::BROWSER_BINDING_MINUTES,
+            $printAgent->uuid.'.'.$browserBindingToken,
+            PrintAgent::BROWSER_BINDING_MINUTES,
             '/',
             null,
             null,
@@ -131,8 +157,17 @@ class PrintAgentController extends Controller
             ->withCookie($binding);
     }
 
-    public function unbindBrowser(): RedirectResponse
+    public function unbindBrowser(Request $request): RedirectResponse
     {
+        $binding = (string) $request->cookie(PrintAgent::BROWSER_COOKIE, '');
+        $parts = PrintAgent::parseBrowserBinding($binding);
+        if ($parts !== null) {
+            $agent = PrintAgent::where('uuid', $parts[0])->first();
+            if ($agent?->matchesBrowserBinding($binding)) {
+                $agent->update(['browser_binding_token_hash' => null]);
+            }
+        }
+
         return back()
             ->with('success', 'This browser is no longer linked to a local print agent.')
             ->withCookie(cookie()->forget(PrintAgent::BROWSER_COOKIE));

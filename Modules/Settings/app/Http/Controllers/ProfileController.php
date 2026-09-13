@@ -8,19 +8,21 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Modules\Finance\app\Services\InventoryValuationService;
 use Modules\Settings\app\Models\Restore;
 
 class ProfileController extends Controller
 {
+    public function __construct(private readonly InventoryValuationService $inventoryValuation)
+    {
+    }
+
     /**
      * Display a listing of the resource.
      */
     public function dashboard(){
         $data['productsCount'] = DB::table('product')->count();
-        $data['stockValue'] = (float) DB::table('stock')
-            ->join('product', 'stock.stock_product_id', '=', 'product.product_code')
-            ->where('stock.stock_qty', '>', 0)
-            ->value(DB::raw('COALESCE(SUM(COALESCE(product.pprice, 0) * (stock.stock_qty / NULLIF(product.uqty, 0))), 0)'));
+        $data['stockValue'] = $this->inventoryValuation->mrpValue();
         $data['customersCount'] = DB::table('customer')->count();
         $data['purchaseCount'] = DB::table('purchase')->count();
         $data['saleCount'] = DB::table('sales')->count();

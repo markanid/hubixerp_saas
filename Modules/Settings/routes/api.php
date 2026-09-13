@@ -32,6 +32,10 @@ Route::middleware([
         Route::post('/heartbeat', [PrintAgentApiController::class, 'heartbeat'])
             ->name('heartbeat');
 
+        Route::post('/browser-link-code', [PrintAgentApiController::class, 'browserLinkCode'])
+            ->middleware('throttle:10,1')
+            ->name('browser-link-code');
+
         Route::get('/jobs/next', [PrintAgentApiController::class, 'next'])
             ->name('jobs.next');
 

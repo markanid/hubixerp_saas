@@ -75,6 +75,15 @@ internal sealed class AgentApiClient : IDisposable
         return await response.Content.ReadFromJsonAsync<PrintJob>(_json, cancellationToken);
     }
 
+    public async Task<BrowserLinkCodeResponse> CreateBrowserLinkCodeAsync(CancellationToken cancellationToken)
+    {
+        using var request = Authorized(HttpMethod.Post, "browser-link-code");
+        request.Content = JsonContent.Create(new { }, options: _json);
+        using var response = await _http.SendAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken, _settings.ServerUrl);
+        return (await response.Content.ReadFromJsonAsync<BrowserLinkCodeResponse>(_json, cancellationToken))!;
+    }
+
     public async Task UpdateJobStatusAsync(PrintJob job, string status, string? error, CancellationToken cancellationToken)
     {
         using var request = Authorized(HttpMethod.Post, $"jobs/{job.JobId}/status");
@@ -134,5 +143,6 @@ internal sealed class AgentApiClient : IDisposable
 
 internal sealed record PairResponse(string AgentId, string AgentName, string Token, int PollSeconds, int HeartbeatSeconds);
 internal sealed record ApiError(string Message);
+internal sealed record BrowserLinkCodeResponse(string Code, DateTimeOffset ExpiresAt);
 internal sealed record PrintJob(string JobId, string ClaimToken, string RenderUrl, string PrinterName, int Copies, PrintJobSettings Settings);
 internal sealed record PrintJobSettings(string PaperSize, string Orientation, int Scale, int MarginMm, double? PageWidthMm, double? PageHeightMm);

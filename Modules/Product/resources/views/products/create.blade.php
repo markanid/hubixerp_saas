@@ -36,7 +36,11 @@
 <form id="addProduct" method="post" action="{{ route('products.update') }}" enctype="multipart/form-data">
     @csrf
     @php
-        $isUsed = $product->purchaseInDetails->isNotEmpty() || $product->saleInDetails->isNotEmpty() || $product->returnInDetails->isNotEmpty() || $product->serviceInDetails->isNotEmpty();
+        // Keep the form safe during rolling deployments or calls from older cached controllers.
+        $isUsed = $isUsed ?? false;
+        $batchMode = $batchMode ?? false;
+        $inventoryMode = $inventoryMode ?? ($batchMode ? 'batch' : 'standard');
+        $stockEditable = $stockEditable ?? false;
     @endphp
     <input type="hidden" id="id" name="id" value="{{ $product->id ?? '' }}">
     <div class="card card-navy">
@@ -147,7 +151,11 @@
             </div>
                 <div class="form-group col-md-3">
                     <label>Unit Qty</label>
-                    <input type="text" name="uqty" id="unit_qty" tabindex="12" class="form-control" value="{{ !empty($product->uqty) ? $product->uqty : '1.00' }}">
+                    <input type="text" name="uqty" id="unit_qty" tabindex="12" class="form-control"
+                        value="{{ old('uqty', !empty($product->uqty) ? $product->uqty : '1.00') }}" {{ $isUsed ? 'disabled' : '' }}>
+                    @if ($isUsed)
+                        <input type="hidden" name="uqty" value="{{ $product->uqty }}">
+                    @endif
                     @if ($errors->has('uqty'))
                     <span class="text-danger">{{ $errors->first('uqty') }}</span>
                     @endif
@@ -168,18 +176,30 @@
                 </div>
                 <div class="form-group col-md-3">
                     <label>Stock Qty</label>
-                    <input type="text" name="stock_qty" id="stock_qty" tabindex="15" class="form-control" value="0"
-                        {{ $batchMode && ($product->is_batch_managed ?? false) ? 'disabled' : '' }}>
-                    @if($batchMode)<small class="text-muted">Opening stock for batch products must be entered through Purchase with batch details.</small>@endif
+                    <input type="text" name="stock_qty" id="stock_qty" tabindex="15" class="form-control"
+                        value="{{ old('stock_qty', $stockQty) }}" {{ !$stockEditable ? 'disabled' : '' }}>
+                    @if($isUsed)
+                        <small class="text-muted">Stock is locked because this product has inventory transactions. Use the related transaction or stock adjustment workflow.</small>
+                    @elseif($inventoryMode === 'mrp')
+                        <small class="text-muted">Stock is calculated from MRP lots and must be changed through inventory transactions.</small>
+                    @elseif($batchMode)
+                        <small class="text-muted">Stock for batch-managed products must be changed through inventory transactions with batch details.</small>
+                    @endif
                     <span class="text-danger"></span>
                 </div>
                 <div class="form-group col-md-3">
                     <label>Batch Managed</label>
                     <div class="custom-control custom-switch mt-2">
-                        <input type="hidden" name="is_batch_managed" value="0">
+                        @if (!$isUsed)
+                            <input type="hidden" name="is_batch_managed" value="0">
+                        @endif
                         <input type="checkbox" class="custom-control-input" id="is_batch_managed"
-                            name="is_batch_managed" value="1" {{ old('is_batch_managed', $product->is_batch_managed ?? false) ? 'checked' : '' }}>
+                            name="is_batch_managed" value="1" {{ old('is_batch_managed', $product->is_batch_managed ?? false) ? 'checked' : '' }}
+                            {{ $isUsed ? 'disabled' : '' }}>
                         <label class="custom-control-label" for="is_batch_managed">Track batches and expiry</label>
+                        @if ($isUsed)
+                            <input type="hidden" name="is_batch_managed" value="{{ $product->is_batch_managed ? 1 : 0 }}">
+                        @endif
                     </div>
                 </div>
             </div>
