@@ -3,6 +3,7 @@
 namespace Modules\Product\app\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Modules\Estimation\app\Models\EstimationDetail;
 use Modules\Master\app\Models\Brand;
@@ -26,6 +27,24 @@ class Product extends Model
     protected $fillable = ['product_code', 'product', 'hsn_code', 'mrp', 'margin', 'amt_margin', 'price', 'pprice', 'unit', 'uqty', 'gst', 'maxquantity', 'minquantity', 'brandid', 'categoryid', 'subcategoryid', 'groupid', 'typeid', 'is_batch_managed', 'bcode_image', 'qrcode_image', 'product_image', 'bar_code', 'status'];
 
     protected $casts = ['is_batch_managed' => 'boolean'];
+
+    public function scopeMatchingSearch(Builder $query, string $term): Builder
+    {
+        $term = trim($term);
+
+        // Resolve a scanned barcode before applying partial-name matching or limits.
+        foreach (['bar_code', 'product_code'] as $column) {
+            if ($term !== '' && (clone $query)->where($column, $term)->exists()) {
+                return $query->where($column, $term);
+            }
+        }
+
+        return $query->where(function (Builder $builder) use ($term) {
+            $builder->where('product_code', 'like', "%{$term}%")
+                ->orWhere('product', 'like', "%{$term}%")
+                ->orWhere('bar_code', 'like', "%{$term}%");
+        });
+    }
     
     public function brand()
     {

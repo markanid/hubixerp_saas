@@ -650,25 +650,65 @@
     }
 
     let searchTimer = null;
-    $('#productSearch').on('input', function () {
+    let productSearchRequest = null;
+    let productSearchVersion = 0;
+
+    function cancelProductSearch() {
         clearTimeout(searchTimer);
-        const query = $(this).val();
-        if (!query) { $('#productResults').empty(); return; }
-        searchTimer = setTimeout(() => {
-            $.get('{{ route('pos.products') }}', {q: query}).done(data => {
-                renderProducts(data.products || []);
-                if ((data.products || []).length === 1 && query.length >= 4) {
-                    addProduct(data.products[0]);
+        productSearchVersion++;
+        if (productSearchRequest) {
+            productSearchRequest.abort();
+            productSearchRequest = null;
+        }
+    }
+
+    function searchProducts(submitted = false) {
+        cancelProductSearch();
+        const query = $('#productSearch').val().trim();
+        $('#productResults').empty();
+        if (!query) return;
+        const version = productSearchVersion;
+        const search = () => {
+            productSearchRequest = $.get('{{ route('pos.products') }}', {q: query}).done(data => {
+                if (version !== productSearchVersion || $('#productSearch').val().trim() !== query) return;
+                const products = data.products || [];
+                renderProducts(products);
+                const exact = products.find(product => [product.barcode, product.product_code]
+                    .some(code => code != null && String(code) === query));
+                const product = exact || (submitted && products.length === 1 ? products[0] : null);
+                if (product) {
+                    cancelProductSearch();
+                    addProduct(product);
                     $('#productSearch').val('').focus();
                     $('#productResults').empty();
+                } else if (submitted && !products.length) {
+                    toastr.warning('No product found for this barcode.');
                 }
+            }).fail((xhr, status) => {
+                if (version === productSearchVersion && status !== 'abort') {
+                    toastr.error('Could not load products. Please scan again.');
+                }
+            }).always(() => {
+                if (version === productSearchVersion) productSearchRequest = null;
             });
-        }, 120);
+        };
+        if (submitted) search();
+        else searchTimer = setTimeout(search, 120);
+    }
+
+    $('#productSearch').on('input', function () {
+        searchProducts();
+    }).on('keydown', function (event) {
+        if (!['Enter', 'Tab'].includes(event.key) || !$(this).val().trim()) return;
+        event.preventDefault();
+        if (!event.repeat) searchProducts(true);
     });
 
     $('#productResults').on('click', '.product-tile', function () {
+        cancelProductSearch();
         addProduct($(this).data('product'));
         $('#productSearch').val('').focus();
+        $('#productResults').empty();
     });
 
     $('#cartBody').on('input', '.qty-input,.disc-input', function () {

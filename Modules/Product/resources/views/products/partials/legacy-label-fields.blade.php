@@ -12,13 +12,13 @@
 
 @foreach($barcodeFieldLabels as $field => $heading)
     <div class="label-field {{ $field === 'product_name' ? 'product-name' : '' }}">
-        <strong>{{ $heading }}:</strong>
+        @include('product::products.partials.label-field-heading')
         @if($field === 'purchase_price')
-            {{ $currencySymbol }} {{ $maskPurchasePrice
+            <span class="label-currency">{{ $currencySymbol }}</span> {{ $maskPurchasePrice
                 ? \Modules\Settings\app\Models\BarcodeSetting::maskPurchasePrice($legacyFieldValues[$field] ?? null)
                 : number_format((float) ($legacyFieldValues[$field] ?? 0), 2) }}
         @elseif(in_array($field, ['mrp', 'sale_price'], true))
-            {{ $currencySymbol }} {{ number_format((float) ($legacyFieldValues[$field] ?? 0), 2) }}
+            <span class="label-currency">{{ $currencySymbol }}</span> {{ number_format((float) ($legacyFieldValues[$field] ?? 0), 2) }}
         @elseif($field === 'expiry_date')
             {{ $legacyFieldValues[$field] instanceof \Carbon\CarbonInterface ? $legacyFieldValues[$field]->format('d/m/Y') : '-' }}
         @else

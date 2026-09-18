@@ -32,11 +32,7 @@ class StockService
         return Product::with($this->stockRelations())
             ->where('typeid', '!=', 3)
             ->where('status', '1')
-            ->where(function ($builder) use ($query) {
-                $builder->where('product_code', 'like', "%{$query}%")
-                    ->orWhere('product', 'like', "%{$query}%")
-                    ->orWhere('bar_code', 'like', "%{$query}%");
-            })
+            ->matchingSearch($query)
             ->limit(20)
             ->get()
             ->map(fn (Product $product) => $this->formatProduct($product));

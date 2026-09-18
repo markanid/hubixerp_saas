@@ -66,6 +66,8 @@ class CompanyPrintSettingsUpdateTest extends TestCase
             $table->timestamps();
         });
 
+        (require database_path('migrations/2026_09_16_000001_add_barcode_label_columns.php'))->up();
+
         DB::table('company')->insert([
             'id' => 1,
             'inventory_mode' => 'standard',
@@ -89,6 +91,8 @@ class CompanyPrintSettingsUpdateTest extends TestCase
             'label_width_mm' => 62,
             'label_height_mm' => 31,
             'label_margin_mm' => 3,
+            'label_columns' => 2,
+            'label_column_gap_mm' => 2.5,
             'mask_purchase_price' => 1,
             'print_settings' => [
                 'service' => [
@@ -117,6 +121,8 @@ class CompanyPrintSettingsUpdateTest extends TestCase
             'label_width_mm' => 62,
             'label_height_mm' => 31,
             'label_margin_mm' => 3,
+            'label_columns' => 2,
+            'label_column_gap_mm' => 2.5,
             'mask_purchase_price' => 1,
         ]);
     }

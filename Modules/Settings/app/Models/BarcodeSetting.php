@@ -48,6 +48,8 @@ class BarcodeSetting extends Model
         'label_width_mm',
         'label_height_mm',
         'label_margin_mm',
+        'label_columns',
+        'label_column_gap_mm',
         'auto_print',
         'mask_purchase_price',
     ];
@@ -57,6 +59,8 @@ class BarcodeSetting extends Model
         'label_width_mm' => 'integer',
         'label_height_mm' => 'integer',
         'label_margin_mm' => 'integer',
+        'label_columns' => 'integer',
+        'label_column_gap_mm' => 'float',
         'auto_print' => 'boolean',
         'mask_purchase_price' => 'boolean',
     ];
@@ -65,6 +69,8 @@ class BarcodeSetting extends Model
         'label_width_mm' => 80,
         'label_height_mm' => 40,
         'label_margin_mm' => 2,
+        'label_columns' => 1,
+        'label_column_gap_mm' => 0,
         'auto_print' => true,
     ];
 
@@ -96,7 +102,23 @@ class BarcodeSetting extends Model
             'label_width_mm' => (int) ($setting?->label_width_mm ?? self::THERMAL_DEFAULTS['label_width_mm']),
             'label_height_mm' => (int) ($setting?->label_height_mm ?? self::THERMAL_DEFAULTS['label_height_mm']),
             'label_margin_mm' => (int) ($setting?->label_margin_mm ?? self::THERMAL_DEFAULTS['label_margin_mm']),
+            'label_columns' => (int) ($setting?->label_columns ?? self::THERMAL_DEFAULTS['label_columns']),
+            'label_column_gap_mm' => (float) ($setting?->label_column_gap_mm ?? self::THERMAL_DEFAULTS['label_column_gap_mm']),
             'auto_print' => (bool) ($setting?->auto_print ?? self::THERMAL_DEFAULTS['auto_print']),
+        ];
+    }
+
+    /** A printer page is one complete row of stickers, excluding the feed gap. */
+    public static function pageSize(array $settings): array
+    {
+        $columns = max(1, min(4, (int) ($settings['label_columns'] ?? 1)));
+        $gap = max(0, (float) ($settings['label_column_gap_mm'] ?? 0));
+
+        return [
+            'width_mm' => round((float) $settings['label_width_mm'] * $columns + $gap * ($columns - 1), 2),
+            'height_mm' => (float) $settings['label_height_mm'],
+            'columns' => $columns,
+            'column_gap_mm' => $gap,
         ];
     }
 

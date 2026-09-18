@@ -248,7 +248,7 @@ class SaleController extends Controller
 
     public function search(Request $request)
     {
-        $query = $request->input('query');
+        $query = trim((string) $request->input('query'));
         $searchBy = $request->input('searchBy');
 
         if ($searchBy === 'customer') {
@@ -266,11 +266,7 @@ class SaleController extends Controller
                 ->when(
                     $inventoryLabel,
                     fn ($builder) => $builder->whereKey($inventoryLabel->product->id),
-                    fn ($builder) => $builder->where(function ($q) use ($query) {
-                        $q->where('product_code', 'LIKE', "%{$query}%")
-                            ->orWhere('product', 'LIKE', "%{$query}%")
-                            ->orWhere('bar_code', 'LIKE', "%{$query}%");
-                    })
+                    fn ($builder) => $builder->matchingSearch($query)
                 )
                 ->get();
 
@@ -290,6 +286,7 @@ class SaleController extends Controller
                 return [
                     'id'            => $product->id,
                     'product_code'  => $product->product_code,
+                    'bar_code'      => $product->bar_code,
                     'product'       => $product->product,
                     'hsn_code'      => $product->hsn_code,
                     'price'         => $slotDetails['sale_price'] ?? $product->price,

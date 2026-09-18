@@ -62,7 +62,7 @@ if (!function_exists('generateQrCodeImage')) {
     function generateQrCodeImage(string $qrText, array &$validatedData): void
     {
         $qrFilename = 'qr_' . Str::uuid() . '.png';
-        $qrImage = QrCode::format('png')->size(200)->generate($qrText);
+        $qrImage = QrCode::format('png')->size(200)->margin(4)->generate($qrText);
 
         Storage::disk('public')->put("product_logos/qrcode_logos/{$qrFilename}", $qrImage);
 

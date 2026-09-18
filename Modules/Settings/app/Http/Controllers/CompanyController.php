@@ -221,6 +221,8 @@ class CompanyController extends Controller
             'label_width_mm' => ['required', 'integer', 'min:20', 'max:150'],
             'label_height_mm' => ['required', 'integer', 'min:15', 'max:150'],
             'label_margin_mm' => ['required', 'integer', 'min:0', 'max:10'],
+            'label_columns' => ['sometimes', 'required', 'integer', 'min:1', 'max:4'],
+            'label_column_gap_mm' => ['sometimes', 'required', 'numeric', 'min:0', 'max:10', 'decimal:0,1'],
             'mask_purchase_price' => ['nullable', 'boolean'],
             'print_settings' => ['nullable', 'array'],
             'print_settings.*.print_method' => ['required', Rule::in(array_keys(PrintSetting::PRINT_METHODS))],
@@ -253,6 +255,11 @@ class CompanyController extends Controller
             'label_margin_mm' => $validated['label_margin_mm'],
             'mask_purchase_price' => !empty($validated['mask_purchase_price']),
         ];
+        foreach (['label_columns', 'label_column_gap_mm'] as $key) {
+            if (array_key_exists($key, $validated)) {
+                $thermalLabelSettings[$key] = $validated[$key];
+            }
+        }
         $submittedPrintSettings = $validated['print_settings'] ?? [];
         unset(
             $validated['sale_fields'],
@@ -261,6 +268,8 @@ class CompanyController extends Controller
             $validated['label_width_mm'],
             $validated['label_height_mm'],
             $validated['label_margin_mm'],
+            $validated['label_columns'],
+            $validated['label_column_gap_mm'],
             $validated['mask_purchase_price'],
             $validated['print_settings']
         );
@@ -339,3 +348,4 @@ class CompanyController extends Controller
         return redirect()->route('company.index')->with('success', 'Record deleted successfully');
     }
 }
+ 

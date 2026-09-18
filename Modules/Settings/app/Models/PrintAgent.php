@@ -10,7 +10,7 @@ class PrintAgent extends Model
     public const BROWSER_COOKIE = 'hubix_print_agent';
     public const BROWSER_BINDING_MINUTES = 60 * 24 * 400;
     public const BROWSER_BINDING_MIN_VERSION = '1.0.4';
-    public const BARCODE_MIN_VERSION = '1.0.3';
+    public const BARCODE_MIN_VERSION = '1.0.5';
 
     protected $fillable = [
         'uuid', 'name', 'machine_name', 'token_hash', 'pairing_code_hash',

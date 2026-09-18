@@ -200,7 +200,7 @@ class EstimationController extends Controller
 
     public function eSearch(Request $request)
     {
-        $query = $request->input('query');
+        $query = trim((string) $request->input('query'));
         $searchBy = $request->input('searchBy');
 
         if ($searchBy === 'customer') {
@@ -215,10 +215,7 @@ class EstimationController extends Controller
         if ($searchBy === 'product') { 
             $products = Product::with(['stock', 'mrpStockLots']) // Eager-load the stock relationship
                 ->where('typeid', '!=', 3) // Exclude service products
-                ->where(function ($q) use ($query) {
-                    $q->where('product_code', 'LIKE', "%{$query}%")
-                    ->orWhere('product', 'LIKE', "%{$query}%");
-                })
+                ->matchingSearch($query)
                 ->get();
 
             $formattedProducts = $products->map(function ($product) {
@@ -230,6 +227,7 @@ class EstimationController extends Controller
                 return [
                     'id'            => $product->id,
                     'product_code'  => $product->product_code,
+                    'bar_code'      => $product->bar_code,
                     'product'       => $product->product,
                     'hsn_code'      => $product->hsn_code,
                     'price'         => $product->price,

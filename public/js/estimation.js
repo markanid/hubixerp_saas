@@ -148,6 +148,27 @@ $(document).ready(function() {
 
     let customerSelector = null;
     let productSelector = null;
+    let productResultTerm = null;
+    let productResults = [];
+
+    function productSearchResult(item) {
+        return {
+            id: item.id,
+            text: item.product_code + " - " + item.product,
+            product_code: item.product_code,
+            bar_code: item.bar_code,
+            product_name: item.product,
+            price: item.price,
+            sale_price: item.price,
+            mrp: item.mrp,
+            margin: item.margin,
+            amt_margin: item.amt_margin,
+            unit: item.unit,
+            unit_qty: item.uqty,
+            current_stock: item.current_stock
+        };
+    }
+
     function initializeSelect2(selector, searchBy, route) {
         $(selector).select2({
             minimumInputLength: 0,
@@ -172,20 +193,7 @@ $(document).ready(function() {
                                 phone: item.phone
                             };
                         } else if (searchBy === 'product') {
-                            return {
-                                id: item.id,
-                                text: item.product_code + " - " + item.product,
-                                product_code: item.product_code,
-                                product_name: item.product,
-                                price: item.price,
-                                sale_price: item.price,
-                                mrp: item.mrp,
-                                margin: item.margin,
-                                amt_margin: item.amt_margin,
-                                unit: item.unit,
-                                unit_qty: item.uqty,
-                                current_stock: item.current_stock
-                            };
+                            return productSearchResult(item);
                         }
                     });
 
@@ -199,6 +207,8 @@ $(document).ready(function() {
                     }
 
                     if (searchBy === 'product') {
+                        productResultTerm = (params.term || '').trim();
+                        productResults = results.slice();
                         results.push({
                             id: 'new',
                             text: ' Create New Product',
@@ -459,6 +469,82 @@ $(document).ready(function() {
 
     // Apply autocomplete to Product Name input
     initializeSelect2("#product", "product", estimationSearchRoute);
+
+    let scannedProductRequest = null;
+    let scannedProductVersion = 0;
+
+    function cancelScannedProductSearch() {
+        scannedProductVersion++;
+        if (scannedProductRequest) {
+            scannedProductRequest.abort();
+            scannedProductRequest = null;
+        }
+    }
+
+    function isProductSearchField(target) {
+        const select = $('#product').data('select2');
+        return select && select.isOpen() && select.dropdown.$search[0] === target;
+    }
+
+    document.addEventListener('input', function (event) {
+        if (isProductSearchField(event.target)) cancelScannedProductSearch();
+    }, true);
+
+    // A scanner submits with Enter/Tab before Select2's delayed request finishes.
+    document.addEventListener('keydown', function (event) {
+        if (!['Enter', 'Tab'].includes(event.key) || !isProductSearchField(event.target)) return;
+        const term = event.target.value.trim();
+        if (!term) return;
+
+        const select = $('#product').data('select2');
+        const $highlighted = select.results.getHighlightedResults();
+        const highlighted = $highlighted.length
+            ? $.fn.select2.amd.require('select2/utils').GetData($highlighted[0], 'data')
+            : null;
+        const exactReady = productResults.some(item => [item.bar_code, item.product_code]
+            .some(code => code != null && String(code) === term));
+        if (event.key === 'Enter' && productResultTerm === term && highlighted && !exactReady
+            && productResults.some(item => String(item.id) === String(highlighted.id))) return;
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (event.repeat || scannedProductRequest) return;
+
+        clearTimeout(select.dataAdapter._queryTimeout);
+        if (select.dataAdapter._request) select.dataAdapter._request.abort();
+        const version = ++scannedProductVersion;
+        scannedProductRequest = $.getJSON(estimationSearchRoute, {query: term, searchBy: 'product'})
+            .done(function (items) {
+                if (version !== scannedProductVersion || !select.isOpen() || select.dropdown.$search.val().trim() !== term) return;
+                const matches = items.map(productSearchResult);
+                const exact = matches.find(item => [item.bar_code, item.product_code]
+                    .some(code => code != null && String(code) === term));
+                const result = exact || (matches.length === 1 ? matches[0] : null);
+                if (!result) {
+                    showEstimationWarningToast('Product Search', matches.length
+                        ? 'Several products match. Select the required product from the list.'
+                        : 'No product found for this barcode. Check the code or use Create New Product.');
+                    select.trigger('query', {term: term});
+                    return;
+                }
+
+                const $product = $('#product');
+                $product.find('option').filter(function () { return String(this.value) === String(result.id); }).remove();
+                $product.append(new Option(result.text, result.id, true, true)).trigger('change');
+                $product.select2('close');
+                $product.trigger({type: 'select2:select', params: {data: result}});
+            })
+            .fail(function (xhr, status) {
+                if (version === scannedProductVersion && status !== 'abort') {
+                    showEstimationWarningToast('Product Search', 'Could not load the product. Please scan again.');
+                }
+            })
+            .always(function () {
+                if (version === scannedProductVersion) scannedProductRequest = null;
+            });
+    }, true);
+
+    $('#product').on('select2:close', cancelScannedProductSearch);
 
      // Event handler for when the unit is changed
      $('#item_unit').change(function() {

@@ -168,6 +168,7 @@ class PrintAgentApiController extends Controller
         $settingType = $job->document_type === 'test' ? 'sale' : $job->document_type;
         $setting = PrintSetting::forDocument($settingType);
         $thermalSettings = $job->document_type === 'barcode' ? BarcodeSetting::thermalSettings() : null;
+        $labelPageSize = $thermalSettings ? BarcodeSetting::pageSize($thermalSettings) : null;
 
         return response()->json([
             'job_id' => $job->uuid,
@@ -178,10 +179,10 @@ class PrintAgentApiController extends Controller
             'settings' => [
                 'paper_size' => $thermalSettings ? 'custom' : $setting->paper_size,
                 'orientation' => $thermalSettings ? 'portrait' : $setting->orientation,
-                'scale' => $setting->scale,
+                'scale' => $thermalSettings ? 100 : $setting->scale,
                 'margin_mm' => $thermalSettings ? 0 : $setting->margin_mm,
-                'page_width_mm' => $thermalSettings['label_width_mm'] ?? null,
-                'page_height_mm' => $thermalSettings['label_height_mm'] ?? null,
+                'page_width_mm' => $labelPageSize['width_mm'] ?? null,
+                'page_height_mm' => $labelPageSize['height_mm'] ?? null,
             ],
         ]);
     }

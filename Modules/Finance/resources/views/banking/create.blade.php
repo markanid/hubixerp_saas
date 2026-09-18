@@ -46,7 +46,7 @@
                 <div class="col-md-6">
                     <div class="form-group">
                         <label>Bank Name<sup>*</sup></label>
-                        <input type="text" name="bk_bank" id="bank_name" tabindex="1" class="form-control" value="{{ !empty($bank->bk_bank) ? $bank->bk_bank : '' }}">
+                        <input type="text" name="bk_bank" id="bank_name" tabindex="1" class="form-control" value="{{ old('bk_bank', $bank->bk_bank ?? '') }}">
                         @if ($errors->has('bk_bank'))
                           <span class="text-danger">{{ $errors->first('bk_bank') }}</span>
                         @endif
@@ -55,7 +55,7 @@
                 <div class="col-md-6">
                     <div class="form-group">
                         <label>Account No.<sup>*</sup></label>
-                        <input type="text" name="bk_account" id="account_number" tabindex="2" class="form-control" value="{{ !empty($bank->bk_account) ? $bank->bk_account : '' }}">
+                        <input type="text" name="bk_account" id="account_number" tabindex="2" class="form-control" value="{{ old('bk_account', $bank->bk_account ?? '') }}">
                         @if ($errors->has('bk_account'))
                           <span class="text-danger">{{ $errors->first('bk_account') }}</span>
                         @endif
@@ -64,7 +64,7 @@
                 <div class="col-md-6">
                     <div class="form-group">
                         <label>Branch Name<sup>*</sup></label>
-                        <input type="text" name="bk_branch" id="branch_name" tabindex="3" class="form-control" value="{{ !empty($bank->bk_branch) ? $bank->bk_branch : '' }}">
+                        <input type="text" name="bk_branch" id="branch_name" tabindex="3" class="form-control" value="{{ old('bk_branch', $bank->bk_branch ?? '') }}">
                         @if ($errors->has('bk_branch'))
                           <span class="text-danger">{{ $errors->first('bk_branch') }}</span>
                         @endif
@@ -73,7 +73,7 @@
                 <div class="col-md-6">
                     <div class="form-group">
                         <label>IFSC Code<sup>*</sup></label>
-                        <input type="text" name="bk_ifsc" id="branch_ifsc" tabindex="5" class="form-control" value="{{ !empty($bank->bk_ifsc) ? $bank->bk_ifsc : '' }}">
+                        <input type="text" name="bk_ifsc" id="branch_ifsc" tabindex="5" class="form-control" value="{{ old('bk_ifsc', $bank->bk_ifsc ?? '') }}">
                         @if ($errors->has('bk_ifsc'))
                           <span class="text-danger">{{ $errors->first('bk_ifsc') }}</span>
                         @endif
@@ -82,7 +82,7 @@
                 <div class="col-md-6">
                     <div class="form-group">
                         <label>Opening Balance<sup>*</sup></label>
-                        <input type="text" name="bk_opbalance" id="opening_balance" tabindex="6" class="form-control" value="{{ !empty($bank->bk_opbalance) ? $bank->bk_opbalance : '' }}" @if($hasLedger) readonly @endif>
+                        <input type="text" name="bk_opbalance" id="opening_balance" tabindex="6" class="form-control" value="{{ $hasLedger ? $bank->bk_opbalance : old('bk_opbalance', $bank->bk_opbalance ?? '') }}" @if($hasLedger) readonly @endif>
                         @if ($errors->has('bk_opbalance'))
                           <span class="text-danger">{{ $errors->first('bk_opbalance') }}</span>
                         @endif

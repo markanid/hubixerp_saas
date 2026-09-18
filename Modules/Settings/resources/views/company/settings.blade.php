@@ -262,7 +262,12 @@
                                                             <span>&times;</span>
                                                             <input id="label_height_mm" type="number" name="label_height_mm" min="15" max="150" class="form-control form-control-sm" value="{{ old('label_height_mm', $thermalLabelSettings['label_height_mm']) }}" title="Label height in millimetres" required>
                                                         </div>
-                                                        <small class="text-muted">Width &times; height (mm)</small>
+                                                        <small class="text-muted">One sticker: width &times; height (mm)</small>
+                                                        <label class="small mt-2 mb-0" for="label_columns">Labels across</label>
+                                                        <input id="label_columns" type="number" name="label_columns" min="1" max="4" class="form-control form-control-sm" value="{{ old('label_columns', $thermalLabelSettings['label_columns'] ?? 1) }}" required>
+                                                        <label class="small mt-1 mb-0" for="label_column_gap_mm">Gap between columns (mm)</label>
+                                                        <input id="label_column_gap_mm" type="number" name="label_column_gap_mm" min="0" max="10" step="0.1" class="form-control form-control-sm" value="{{ old('label_column_gap_mm', $thermalLabelSettings['label_column_gap_mm'] ?? 0) }}" required>
+                                                        <small class="text-muted">Printer paper size must cover one full row. Exclude the gap between rows.</small>
                                                     @else
                                                         <select name="print_settings[{{ $documentType }}][paper_size]" class="form-control form-control-sm">
                                                             @foreach($paperSizes as $value => $label)
@@ -284,12 +289,17 @@
                                                     @endif
                                                 </td>
                                                 <td>
+                                                    @if($documentType === 'barcode')
+                                                    <input type="hidden" name="print_settings[barcode][scale]" value="100">
+                                                    <span class="form-control form-control-sm bg-light">100%</span>
+                                                    @else
                                                     <input type="number"
                                                            name="print_settings[{{ $documentType }}][scale]"
                                                            min="50"
                                                            max="150"
                                                            class="form-control form-control-sm"
                                                            value="{{ old("print_settings.$documentType.scale", $setting->scale) }}">
+                                                    @endif
                                                 </td>
                                                 <td>
                                                     @if($documentType === 'barcode')
@@ -364,7 +374,7 @@
                                     <a class="btn btn-sm btn-success" href="{{ asset('downloads/HubixPrintAgent-win-x64.zip') }}" download>
                                         <i class="fas fa-download"></i> Download Windows Print Agent
                                     </a>
-                                    <small class="text-muted ml-2">Version 1.0.4. Extract the ZIP and keep all files together on the billing computer.</small>
+                                    <small class="text-muted ml-2">Version 1.0.5. Extract the ZIP and keep all files together on the billing computer.</small>
                                 </p>
                             @endif
 
@@ -513,7 +523,7 @@
                             </div>
                             <div class="alert alert-light border py-2 mt-3 mb-0">
                                 <strong>Mask key:</strong>
-                                <code>1=K, 2=V, 3=M, 4=O, 5=U, 6=L, 7=I, 8=N, 9=6, 0=X</code>
+                                <code>1=K, 2=V, 3=M, 4=O, 5=U, 6=L, 7=I, 8=N, 9=E, 0=X</code>
                                 <span class="d-block text-muted mt-1">Example: 1234.50 is displayed as KVMO.UX. Stored prices and encoded barcode/QR values are unchanged.</span>
                             </div>
 

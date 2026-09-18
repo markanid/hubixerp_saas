@@ -44,16 +44,16 @@ class Estimation extends Model
     public static function getVoucherCode()
     {
         $year = date('m') >= 4 ? date('y') : date('y') - 1;
+        $prefix = 'ES' . $year . '-';
+        $lastNumber = DB::table('estimation')
+            ->where('es_vno', 'like', $prefix . '%')
+            ->pluck('es_vno')
+            ->map(fn ($voucher) => ctype_digit(substr((string) $voucher, strlen($prefix)))
+                ? (int) substr((string) $voucher, strlen($prefix))
+                : 0)
+            ->max() ?? 0;
 
-        $estimation = DB::table('estimation')
-        ->selectRaw('CAST(SUBSTRING(es_vno, 6) AS SIGNED) as voucher_number')
-        ->whereRaw('SUBSTRING(es_vno, 3, 2) = ?', [$year])
-        ->where('es_vno', 'like', 'ES' . $year . '-%')
-        ->latest('es_id')
-        ->first();
-    
-        $nextVoucher = $estimation ? $estimation->es_vno + 1 : 1;
-        return 'ES' . $year . '-' . str_pad($nextVoucher, 4, '0', STR_PAD_LEFT);
+        return $prefix . str_pad((string) ($lastNumber + 1), 4, '0', STR_PAD_LEFT);
     }
 
     protected static function booted()

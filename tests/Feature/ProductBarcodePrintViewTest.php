@@ -8,6 +8,58 @@ use Tests\TestCase;
 
 class ProductBarcodePrintViewTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('database.default', 'sqlite');
+        config()->set('database.connections.sqlite.database', ':memory:');
+        \Illuminate\Support\Facades\DB::purge('sqlite');
+    }
+
+    public function test_two_across_prints_pack_three_stickers_into_two_rows(): void
+    {
+        $products = collect([1, 2, 3])->map(function ($id) {
+            return (new Product())->forceFill([
+                'id' => $id, 'product_code' => 'PRD_'.$id,
+                'product' => 'Product '.$id, 'bar_code' => '81000000000'.$id,
+                'bcode_image' => 'test.png',
+            ]);
+        });
+        $data = [
+            'codeType' => 'barcode',
+            'barcodeFieldLabels' => ['product_code' => 'Product Code'],
+            'thermalSettings' => [
+                'label_width_mm' => 38, 'label_height_mm' => 25,
+                'label_margin_mm' => 1, 'label_columns' => 2,
+                'label_column_gap_mm' => 2.5, 'auto_print' => false,
+            ],
+            'currencySymbol' => 'Rs.', 'maskPurchasePrice' => false,
+            'backUrl' => '/products',
+        ];
+        $rows = $products->map(fn ($product) => [
+            'label' => (new \Modules\Product\app\Models\InventoryLabel())->forceFill([
+                'id' => $product->id, 'barcode' => $product->bar_code,
+            ]),
+            'product_code' => $product->product_code,
+        ]);
+        foreach ([
+            view('product::products.barcode-sheet', $data + ['products' => $products])->render(),
+            view('product::products.inventory-label-print', $data + ['rows' => $rows])->render(),
+        ] as $html) {
+            $this->assertStringContainsString('size: 78.5mm 25mm', $html);
+            $dom = new \DOMDocument();
+            @$dom->loadHTML($html);
+            $xpath = new \DOMXPath($dom);
+            $this->assertSame(2, $xpath->query('//div[@class="label-row"]')->length);
+            $this->assertSame(2, $xpath->query('(//div[@class="label-row"])[1]/div[@class="label"]')->length);
+            $this->assertSame(1, $xpath->query('(//div[@class="label-row"])[2]/div[@class="label"]')->length);
+            $this->assertSame(3, $xpath->query('//div[@class="label"]')->length);
+        }
+        $single = view('product::products.barcode-print', $data + ['product' => $products->first()])->render();
+        $this->assertStringContainsString('size: 78.5mm 25mm', $single);
+        $this->assertSame(1, substr_count($single, 'class="label"'));
+    }
+
     public function test_legacy_print_views_only_render_selected_barcode_fields(): void
     {
         $product = new Product();

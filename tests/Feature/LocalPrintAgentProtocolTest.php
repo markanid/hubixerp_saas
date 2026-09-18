@@ -98,6 +98,8 @@ class LocalPrintAgentProtocolTest extends TestCase
             $table->unsignedSmallInteger('label_width_mm')->default(80);
             $table->unsignedSmallInteger('label_height_mm')->default(40);
             $table->unsignedSmallInteger('label_margin_mm')->default(2);
+            $table->unsignedTinyInteger('label_columns')->default(1);
+            $table->decimal('label_column_gap_mm', 4, 1)->default(0);
             $table->boolean('auto_print')->default(true);
             $table->timestamps();
         });
@@ -182,7 +184,7 @@ class LocalPrintAgentProtocolTest extends TestCase
         $agent = PrintAgent::create([
             'uuid' => (string) Str::uuid(),
             'name' => 'Label Counter',
-            'version' => '1.0.3',
+            'version' => '1.0.5',
             'token_hash' => hash('sha256', $token),
             'enabled' => true,
             'printers' => ['Zebra Label Printer'],
@@ -194,12 +196,14 @@ class LocalPrintAgentProtocolTest extends TestCase
             'document_type' => 'barcode',
             'printer_name' => 'Zebra Label Printer',
         ]);
-        PrintSetting::create(array_merge(PrintSetting::defaultsFor('barcode'), ['print_method' => 'local_agent']));
+        PrintSetting::create(array_merge(PrintSetting::defaultsFor('barcode'), ['print_method' => 'local_agent', 'scale' => 85]));
         DB::table('barcode_settings')->insert([
             'context' => 'inventory',
             'selected_fields' => '[]',
-            'label_width_mm' => 60,
+            'label_width_mm' => 38,
             'label_height_mm' => 30,
+            'label_columns' => 2,
+            'label_column_gap_mm' => 2.5,
             'label_margin_mm' => 2,
             'auto_print' => true,
             'created_at' => now(),
@@ -239,7 +243,8 @@ class LocalPrintAgentProtocolTest extends TestCase
             ->assertOk()
             ->assertJsonPath('printer_name', 'Zebra Label Printer')
             ->assertJsonPath('settings.paper_size', 'custom')
-            ->assertJsonPath('settings.page_width_mm', 60)
+            ->assertJsonPath('settings.scale', 100)
+            ->assertJsonPath('settings.page_width_mm', 78.5)
             ->assertJsonPath('settings.page_height_mm', 30);
     }
 

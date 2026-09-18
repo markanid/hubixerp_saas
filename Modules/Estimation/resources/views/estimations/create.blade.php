@@ -329,5 +329,5 @@
     window.mrpInventoryMode = @json($mrpMode);
     var useEstimationMrpPricingMode = @json($useMrpPricingMode);
 </script>
-<script src="{{ asset('js/estimation.js') }}"></script>
+<script src="{{ asset('js/estimation.js') }}?v={{ filemtime(public_path('js/estimation.js')) }}"></script>
 @endsection
