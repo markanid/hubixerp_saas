@@ -41,6 +41,11 @@
         $batchMode = $batchMode ?? false;
         $inventoryMode = $inventoryMode ?? ($batchMode ? 'batch' : 'standard');
         $stockEditable = $stockEditable ?? false;
+        $openingStockEditable = $openingStockEditable ?? false;
+        $openingBalanceToAllocate = $openingBalanceToAllocate ?? null;
+        $multipleOpeningStock = (bool) old('multiple_opening_stock', false);
+        $openingRows = (array) old('opening_stock', [[]]);
+        $openingRows = $openingRows ?: [[]];
     @endphp
     <input type="hidden" id="id" name="id" value="{{ $product->id ?? '' }}">
     <div class="card card-navy">
@@ -180,12 +185,14 @@
                         value="{{ old('stock_qty', $stockQty) }}" {{ !$stockEditable ? 'disabled' : '' }}>
                     @if($isUsed)
                         <small class="text-muted">Stock is locked because this product has inventory transactions. Use the related transaction or stock adjustment workflow.</small>
+                    @elseif($inventoryMode === 'mrp' && $openingStockEditable)
+                        <small class="text-muted">Creates an opening MRP slot using the purchase price, MRP and sale price above.</small>
                     @elseif($inventoryMode === 'mrp')
-                        <small class="text-muted">Stock is calculated from MRP lots and must be changed through inventory transactions.</small>
-                    @elseif($batchMode)
-                        <small class="text-muted">Stock for batch-managed products must be changed through inventory transactions with batch details.</small>
+                        <small class="text-muted">Stock is calculated from existing MRP slots.</small>
+                    @elseif($batchMode && $openingStockEditable)
+                        <small class="text-muted">For batch-managed stock, enter the batch details below.</small>
                     @endif
-                    <span class="text-danger"></span>
+                    @error('stock_qty')<span class="text-danger">{{ $message }}</span>@enderror
                 </div>
                 <div class="form-group col-md-3">
                     <label>Batch Managed</label>
@@ -205,6 +212,99 @@
             </div>
         </div>
     </div>
+    @if($openingStockEditable && in_array($inventoryMode, ['mrp', 'batch'], true))
+    <div class="card card-outline card-info" id="opening_stock_options" @if($batchMode && !old('is_batch_managed', $product->is_batch_managed ?? false)) style="display:none" @endif>
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-layer-group"></i> Opening Stock Allocation</h3>
+        </div>
+        <div class="card-body">
+            @if($errors->has('opening_stock'))
+                <div class="alert alert-danger py-2">{{ $errors->first('opening_stock') }}</div>
+            @endif
+            @if($openingBalanceToAllocate !== null)
+                <div class="alert alert-warning py-2">
+                    The Stock Qty field contains the existing balance of <strong>{{ $openingBalanceToAllocate }} {{ $product->unit }}</strong>.
+                    Saving will allocate it without increasing total stock.
+                </div>
+            @endif
+
+            @if($batchMode)
+            <div class="row" id="single_opening_batch_fields">
+                <div class="form-group col-md-4">
+                    <label>Opening Batch No.<sup>*</sup></label>
+                    <input type="text" name="opening_batch_no" class="form-control single-opening-input" value="{{ old('opening_batch_no') }}">
+                    @error('opening_batch_no')<small class="text-danger">{{ $message }}</small>@enderror
+                </div>
+                <div class="form-group col-md-4">
+                    <label>Expiry Date</label>
+                    <input type="date" name="opening_expiry_date" class="form-control single-opening-input" value="{{ old('opening_expiry_date') }}">
+                    @error('opening_expiry_date')<small class="text-danger">{{ $message }}</small>@enderror
+                </div>
+            </div>
+            @endif
+
+            <input type="hidden" name="multiple_opening_stock" value="0">
+            <div class="custom-control custom-checkbox mb-3">
+                <input type="checkbox" class="custom-control-input" id="multiple_opening_stock" name="multiple_opening_stock" value="1" {{ $multipleOpeningStock ? 'checked' : '' }}>
+                <label class="custom-control-label" for="multiple_opening_stock">
+                    Existing stock has multiple {{ $inventoryMode === 'mrp' ? 'MRPs' : 'batches' }}
+                </label>
+            </div>
+
+            <div id="multiple_opening_allocation" @if(!$multipleOpeningStock) style="display:none" @endif>
+                <p class="text-muted">Allocate the Stock Qty across the rows below. The row quantities must equal Stock Qty.</p>
+                <div class="table-responsive">
+                <table class="table table-bordered table-sm" id="opening_stock_table">
+                    <thead>
+                        <tr>
+                            @if($batchMode)
+                                <th style="min-width:150px">Batch No.<sup>*</sup></th>
+                                <th style="min-width:145px">Expiry Date</th>
+                            @endif
+                            <th style="min-width:120px">Quantity<sup>*</sup></th>
+                            <th style="min-width:130px">Purchase Price</th>
+                            <th style="min-width:120px">MRP<sup>*</sup></th>
+                            <th style="min-width:130px">Sale Price</th>
+                            <th style="width:50px"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="opening_stock_rows">
+                        @foreach($openingRows as $index => $row)
+                        <tr>
+                            @if($batchMode)
+                            <td>
+                                <input type="text" name="opening_stock[{{ $index }}][batch_no]" class="form-control form-control-sm opening-stock-input" value="{{ $row['batch_no'] ?? '' }}">
+                                @error("opening_stock.$index.batch_no")<small class="text-danger">{{ $message }}</small>@enderror
+                            </td>
+                            <td>
+                                <input type="date" name="opening_stock[{{ $index }}][expiry_date]" class="form-control form-control-sm opening-stock-input" value="{{ $row['expiry_date'] ?? '' }}">
+                                @error("opening_stock.$index.expiry_date")<small class="text-danger">{{ $message }}</small>@enderror
+                            </td>
+                            @endif
+                            <td>
+                                <input type="number" min="0" step="0.01" name="opening_stock[{{ $index }}][quantity]" class="form-control form-control-sm opening-stock-input" value="{{ $row['quantity'] ?? '' }}">
+                                @error("opening_stock.$index.quantity")<small class="text-danger">{{ $message }}</small>@enderror
+                            </td>
+                            <td><input type="number" min="0" step="0.01" name="opening_stock[{{ $index }}][purchase_price]" class="form-control form-control-sm opening-stock-input" value="{{ $row['purchase_price'] ?? '' }}" placeholder="Product default"></td>
+                            <td>
+                                <input type="number" min="0" step="0.01" name="opening_stock[{{ $index }}][mrp]" class="form-control form-control-sm opening-stock-input" value="{{ $row['mrp'] ?? '' }}" placeholder="Product default">
+                                @error("opening_stock.$index.mrp")<small class="text-danger">{{ $message }}</small>@enderror
+                            </td>
+                            <td>
+                                <input type="number" min="0" step="0.01" name="opening_stock[{{ $index }}][sale_price]" class="form-control form-control-sm opening-stock-input" value="{{ $row['sale_price'] ?? '' }}" placeholder="Product default">
+                                @error("opening_stock.$index.sale_price")<small class="text-danger">{{ $message }}</small>@enderror
+                            </td>
+                            <td><button type="button" class="btn btn-sm btn-outline-danger remove-opening-row" title="Remove"><i class="fas fa-times"></i></button></td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="add_opening_row"><i class="fas fa-plus"></i> Add {{ $inventoryMode === 'mrp' ? 'MRP Slot' : 'Batch' }}</button>
+            </div>
+        </div>
+    </div>
+    @endif
     <div class="row"> 
         <div class="col-md-6">     
             <div class="card card-navy">
@@ -435,13 +535,65 @@ $(function () {
         priceInput.addEventListener('input', updateFromPrice);
     });
 </script>
+@if($openingStockEditable && in_array($inventoryMode, ['mrp', 'batch'], true))
 <script>
-    $('#is_batch_managed').on('change', function () {
-        @if($batchMode)
-        $('#stock_qty').prop('disabled', this.checked).val('');
-        @endif
+    $(function () {
+        let openingRowIndex = {{ count($openingRows) }};
+        const batchMode = @json($batchMode);
+
+        function openingRow(index) {
+            const batchColumns = batchMode
+                ? `<td><input type="text" name="opening_stock[${index}][batch_no]" class="form-control form-control-sm opening-stock-input"></td>
+                   <td><input type="date" name="opening_stock[${index}][expiry_date]" class="form-control form-control-sm opening-stock-input"></td>`
+                : '';
+
+            return `<tr>
+                ${batchColumns}
+                <td><input type="number" min="0" step="0.01" name="opening_stock[${index}][quantity]" class="form-control form-control-sm opening-stock-input"></td>
+                <td><input type="number" min="0" step="0.01" name="opening_stock[${index}][purchase_price]" class="form-control form-control-sm opening-stock-input" placeholder="Product default"></td>
+                <td><input type="number" min="0" step="0.01" name="opening_stock[${index}][mrp]" class="form-control form-control-sm opening-stock-input" placeholder="Product default"></td>
+                <td><input type="number" min="0" step="0.01" name="opening_stock[${index}][sale_price]" class="form-control form-control-sm opening-stock-input" placeholder="Product default"></td>
+                <td><button type="button" class="btn btn-sm btn-outline-danger remove-opening-row" title="Remove"><i class="fas fa-times"></i></button></td>
+            </tr>`;
+        }
+
+        function toggleOpeningStock() {
+            const stockable = String($('#type_id').val()) === '2';
+            const tracked = !batchMode || $('#is_batch_managed').is(':checked');
+            const enabled = stockable && tracked;
+
+            $('#opening_stock_card').toggle(enabled);
+            $('#opening_stock_card .opening-stock-input').prop('disabled', !enabled);
+
+            if (batchMode) {
+                $('#stock_qty').prop('disabled', tracked || !stockable);
+                if (tracked) {
+                    $('#stock_qty').val('');
+                }
+            }
+        }
+
+        $('#add_opening_row').on('click', function () {
+            $('#opening_stock_rows').append(openingRow(openingRowIndex++));
+        });
+        $('#opening_stock_rows').on('click', '.remove-opening-row', function () {
+            if ($('#opening_stock_rows tr').length === 1) {
+                $(this).closest('tr').find('input').val('');
+                return;
+            }
+            $(this).closest('tr').remove();
+        });
+        $('#is_batch_managed, #type_id').on('change', toggleOpeningStock);
+        toggleOpeningStock();
     });
 </script>
+@elseif($batchMode)
+<script>
+    $('#is_batch_managed').on('change', function () {
+        $('#stock_qty').prop('disabled', this.checked).val(this.checked ? '' : $('#stock_qty').val());
+    });
+</script>
+@endif
 <script>
     document.getElementById('generate_barcode_btn').addEventListener('click', function () {
         const randomBarcode = Math.floor(1000000000 + Math.random() * 9000000000).toString(); // 10-digit string

@@ -9,6 +9,11 @@ $(document).ready(function() {
     const serviceCollectTax = window.serviceCollectTax !== false;
     const useMrpPricingMode = window.useServiceMrpPricingMode === true;
 
+    function requiresTrackedStock() {
+        return window.mrpInventoryMode === true
+            || (window.batchInventoryMode === true && $('#product').data('batch-managed'));
+    }
+
     function serviceNumber(value) {
         return parseFloat(value) || 0;
     }
@@ -615,7 +620,7 @@ $(document).ready(function() {
         if (!isNaN(quantity) && !isNaN(inStock)) {
             if (quantity > inStock) {
                 showServiceAlert('warning', 'Insufficient Stock', 'Entered quantity exceeds available stock.');
-                if (!allowOutOfStockSale) {
+                if (!allowOutOfStockSale || requiresTrackedStock()) {
                     const allowedQuantity = Math.max(inStock, 0);
                     $(this).val(allowedQuantity > 0 ? allowedQuantity : '');
                 }
@@ -859,7 +864,7 @@ $(document).ready(function() {
         }
 
         const availableStock = parseFloat($('#in_stock').val()) || 0;
-        if (!allowOutOfStockSale && parseFloat(quantity) > availableStock) {
+        if ((!allowOutOfStockSale || requiresTrackedStock()) && parseFloat(quantity) > availableStock) {
             showServiceAlert('warning', 'Insufficient Stock', 'This product cannot be added because the entered quantity exceeds available stock.');
             return;
         }

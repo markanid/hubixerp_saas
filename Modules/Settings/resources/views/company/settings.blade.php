@@ -159,7 +159,7 @@
                                     Allow out-of-stock products to proceed in Sale
                                 </label>
                                 <small class="form-text text-muted">
-                                    If disabled, products cannot be added or saved when requested quantity exceeds stock.
+                                    If disabled, products cannot be added or saved when requested quantity exceeds stock. MRP slots and batch-managed stock always require sufficient tracked quantity.
                                 </small>
                             </div>
 

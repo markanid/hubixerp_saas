@@ -4,19 +4,18 @@ namespace Modules\Settings\app\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Modules\Estimation\app\Models\EstimationSetting;
-use Modules\Sale\app\Models\SaleSetting;
-use Modules\Settings\app\Models\Company;
-use Modules\Settings\app\Models\BarcodeSetting;
-use Modules\Settings\app\Models\PrintSetting;
-use Modules\Settings\app\Models\PrintAgent;
+use Modules\Product\app\Services\BatchInventoryService;
 use Modules\Product\app\Services\MrpInventoryService;
+use Modules\Sale\app\Models\SaleSetting;
+use Modules\Settings\app\Models\BarcodeSetting;
+use Modules\Settings\app\Models\Company;
+use Modules\Settings\app\Models\PrintAgent;
+use Modules\Settings\app\Models\PrintSetting;
 
 class CompanyController extends Controller
 {
@@ -60,12 +59,13 @@ class CompanyController extends Controller
      */
     public function index()
     {
-  
-        $company = Company::orderBy('id','DESC')->get();
-        if ($company!=null && !$company->isEmpty()) {
-            $data = (new Company())->getCompanyDetails();
-            $data['page_title'] = "Company View";
-            return view('settings::company.view', $data); 
+
+        $company = Company::orderBy('id', 'DESC')->get();
+        if ($company != null && ! $company->isEmpty()) {
+            $data = (new Company)->getCompanyDetails();
+            $data['page_title'] = 'Company View';
+
+            return view('settings::company.view', $data);
         } else {
             return redirect()->route('company.edit');
         }
@@ -76,8 +76,9 @@ class CompanyController extends Controller
      */
     public function edit()
     {
-        $data = (new Company())->getCompanyDetails(); // Fetch data using model method
-        $data['page_title'] = "Edit Company";
+        $data = (new Company)->getCompanyDetails(); // Fetch data using model method
+        $data['page_title'] = 'Edit Company';
+
         return view('settings::company.create', $data);
     }
 
@@ -85,12 +86,12 @@ class CompanyController extends Controller
     {
         $company = Company::first();
 
-        if (!$company) {
+        if (! $company) {
             return redirect()->route('company.edit')->with('info', 'Please add company details before changing company settings.');
         }
 
-        $data = (new Company())->getCompanyDetails();
-        $data['page_title'] = "Company Settings";
+        $data = (new Company)->getCompanyDetails();
+        $data['page_title'] = 'Company Settings';
         $data['currencies'] = self::CURRENCIES;
         $data['taxTypes'] = self::TAX_TYPES;
         $data['gstSchemes'] = self::GST_SCHEMES;
@@ -117,76 +118,75 @@ class CompanyController extends Controller
         return view('settings::company.settings', $data);
     }
 
-
     /**
      * Update the specified resource in storage.
      */
     public function update(Request $request)
     {
-        
+
         //  dd($request->all());
         $validated = $request->validate([
-            'company'       => 'required|string|max:255',
-            'address'       => 'nullable|string',
-            'phone'         => 'nullable|string',
-            'email'         => 'nullable|email',
-            'website'       => 'nullable|string|max:255',
-            'licence_no'    => 'nullable|string|max:255',
-            'gst_no'        => 'nullable|string|max:255',
-            'bank_name'     => 'nullable|string|max:255',
-            'bank_ifsc'     => 'nullable|string|max:255',
-            'bank_acno'     => 'nullable|string|max:255',
-            'bank_branch'   => 'nullable|string|max:255',
-            'tags'          => 'nullable|string',
-            'logo'          => 'nullable|image|mimes:jpg,png,jpeg,gif,webp|max:300000',
-            'qr_code'       => 'nullable|image|mimes:jpg,png,jpeg,gif,webp|max:300000',
+            'company' => 'required|string|max:255',
+            'address' => 'nullable|string',
+            'phone' => 'nullable|string',
+            'email' => 'nullable|email',
+            'website' => 'nullable|string|max:255',
+            'licence_no' => 'nullable|string|max:255',
+            'gst_no' => 'nullable|string|max:255',
+            'bank_name' => 'nullable|string|max:255',
+            'bank_ifsc' => 'nullable|string|max:255',
+            'bank_acno' => 'nullable|string|max:255',
+            'bank_branch' => 'nullable|string|max:255',
+            'tags' => 'nullable|string',
+            'logo' => 'nullable|image|mimes:jpg,png,jpeg,gif,webp|max:300000',
+            'qr_code' => 'nullable|image|mimes:jpg,png,jpeg,gif,webp|max:300000',
         ]);
-        
+
         $company = Company::find($request->id);
-        
+
         unset($validated['logo'], $validated['qr_code']);
 
         if ($request->hasFile('logo')) {
             $file = $request->file('logo');
-        
-            if (!$file->isValid()) {
+
+            if (! $file->isValid()) {
                 return back()->with('error', 'Invalid logo upload.');
             }
-        
-            $filename = time() . '_logo_' . uniqid() . '.' . $file->getClientOriginalExtension();
-        
+
+            $filename = time().'_logo_'.uniqid().'.'.$file->getClientOriginalExtension();
+
             $storedPath = $file->storeAs('company_logos', $filename, 'public');
-        
-            if (!$storedPath || !Storage::disk('public')->exists('company_logos/' . $filename)) {
+
+            if (! $storedPath || ! Storage::disk('public')->exists('company_logos/'.$filename)) {
                 return back()->with('error', 'Logo upload failed.');
             }
-        
-            if ($company && !empty($company->company_logo)) {
-                Storage::disk('public')->delete('company_logos/' . $company->company_logo);
+
+            if ($company && ! empty($company->company_logo)) {
+                Storage::disk('public')->delete('company_logos/'.$company->company_logo);
             }
-        
+
             $validated['company_logo'] = $filename;
         }
-        
+
         if ($request->hasFile('qr_code')) {
             $file = $request->file('qr_code');
-        
-            if (!$file->isValid()) {
+
+            if (! $file->isValid()) {
                 return back()->with('error', 'Invalid QR code upload.');
             }
-        
-            $filename = time() . '_qr_' . uniqid() . '.' . $file->getClientOriginalExtension();
-        
+
+            $filename = time().'_qr_'.uniqid().'.'.$file->getClientOriginalExtension();
+
             $storedPath = $file->storeAs('company_qr_codes', $filename, 'public');
-        
-            if (!$storedPath || !Storage::disk('public')->exists('company_qr_codes/' . $filename)) {
+
+            if (! $storedPath || ! Storage::disk('public')->exists('company_qr_codes/'.$filename)) {
                 return back()->with('error', 'QR code upload failed.');
             }
-        
-            if ($company && !empty($company->qr_code)) {
-                Storage::disk('public')->delete('company_qr_codes/' . $company->qr_code);
+
+            if ($company && ! empty($company->qr_code)) {
+                Storage::disk('public')->delete('company_qr_codes/'.$company->qr_code);
             }
-        
+
             $validated['qr_code'] = $filename;
         }
 
@@ -194,9 +194,9 @@ class CompanyController extends Controller
             ['id' => $request->id], // Find by ID
             $validated
         );
-    
+
         // $update = Company::createOrUpdateCompany($validated);
-    
+
         if ($company) {
             return redirect()->route('company.index')->with('success', 'Company details updated successfully.');
         } else {
@@ -204,8 +204,11 @@ class CompanyController extends Controller
         }
     }
 
-    public function updateSettings(Request $request, MrpInventoryService $mrpInventory)
-    {
+    public function updateSettings(
+        Request $request,
+        MrpInventoryService $mrpInventory,
+        BatchInventoryService $batchInventory
+    ) {
         $validated = $request->validate([
             'inventory_mode' => 'required|in:standard,mrp,batch',
             'expiry_alert_days' => 'required|integer|min:1|max:3650',
@@ -236,7 +239,7 @@ class CompanyController extends Controller
 
         $company = Company::first();
 
-        if (!$company) {
+        if (! $company) {
             return redirect()->route('company.edit')->with('info', 'Please add company details before changing company settings.');
         }
 
@@ -253,7 +256,7 @@ class CompanyController extends Controller
             'label_width_mm' => $validated['label_width_mm'],
             'label_height_mm' => $validated['label_height_mm'],
             'label_margin_mm' => $validated['label_margin_mm'],
-            'mask_purchase_price' => !empty($validated['mask_purchase_price']),
+            'mask_purchase_price' => ! empty($validated['mask_purchase_price']),
         ];
         foreach (['label_columns', 'label_column_gap_mm'] as $key) {
             if (array_key_exists($key, $validated)) {
@@ -274,11 +277,20 @@ class CompanyController extends Controller
             $validated['print_settings']
         );
 
-        DB::transaction(function () use ($company, $validated, $previousInventoryMode, $mrpInventory) {
+        DB::transaction(function () use (
+            $company,
+            $validated,
+            $previousInventoryMode,
+            $mrpInventory,
+            $batchInventory
+        ) {
             $company->update($validated);
 
             if ($validated['inventory_mode'] === 'mrp' && $previousInventoryMode !== 'mrp') {
                 $mrpInventory->bootstrapExistingStock($previousInventoryMode);
+            }
+            if ($validated['inventory_mode'] === 'batch' && $previousInventoryMode !== 'batch') {
+                $batchInventory->bootstrapExistingStock();
             }
         });
 
@@ -313,7 +325,7 @@ class CompanyController extends Controller
                     'orientation' => $settings['orientation'] ?? $defaults['orientation'],
                     'scale' => $settings['scale'] ?? $defaults['scale'],
                     'margin_mm' => $settings['margin_mm'] ?? $defaults['margin_mm'],
-                    'auto_print' => !empty($settings['auto_print']),
+                    'auto_print' => ! empty($settings['auto_print']),
                     'printer_name' => null,
                 ]
             );
@@ -337,15 +349,15 @@ class CompanyController extends Controller
     public function destroy()
     {
         $company = Company::firstOrFail();
-        if (!empty($company->company_logo) && Storage::disk('public')->exists('company_logos/' . $company->company_logo)) {
-            Storage::disk('public')->delete('company_logos/' . $company->company_logo);
+        if (! empty($company->company_logo) && Storage::disk('public')->exists('company_logos/'.$company->company_logo)) {
+            Storage::disk('public')->delete('company_logos/'.$company->company_logo);
         }
-        if (!empty($company->qr_code) && Storage::disk('public')->exists('company_qr_codes/' . $company->qr_code)) {
-            Storage::disk('public')->delete('company_qr_codes/' . $company->qr_code);
+        if (! empty($company->qr_code) && Storage::disk('public')->exists('company_qr_codes/'.$company->qr_code)) {
+            Storage::disk('public')->delete('company_qr_codes/'.$company->qr_code);
         }
         // Storage::delete('public/company_logos/' . $company->logo);
         $company->delete();
+
         return redirect()->route('company.index')->with('success', 'Record deleted successfully');
     }
 }
- 

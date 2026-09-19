@@ -12,9 +12,7 @@ use Modules\Settings\app\Models\Company;
 
 class MrpInventoryService
 {
-    public function __construct(private ?InventoryLabelService $inventoryLabels = null)
-    {
-    }
+    public function __construct(private ?InventoryLabelService $inventoryLabels = null) {}
 
     public function enabled(): bool
     {
@@ -27,7 +25,7 @@ class MrpInventoryService
             StockBatch::where('available_quantity', '>', 0)
                 ->orderBy('id')
                 ->each(function (StockBatch $batch) {
-                    $voucher = 'BATCH-' . $batch->id;
+                    $voucher = 'BATCH-'.$batch->id;
                     if (MrpStockLot::where('purchase_voucher', $voucher)->where('product_id', $batch->product_id)->exists()) {
                         return;
                     }
@@ -97,7 +95,7 @@ class MrpInventoryService
                         ->where('purchase_voucher', 'OPENING-DEFICIT')
                         ->lockForUpdate()
                         ->first();
-                    if (!$deficit) {
+                    if (! $deficit) {
                         $pricing = $this->pricingFromProduct($product, $mrp);
                         $deficit = MrpStockLot::create([
                             'product_id' => $product->product_code,
@@ -129,7 +127,7 @@ class MrpInventoryService
             $pricing = $this->pricingFromProduct($product, (float) $product->mrp);
             $lot = MrpStockLot::create([
                 'product_id' => $product->product_code,
-                'purchase_voucher' => 'OPENING-' . now()->format('Ymd'),
+                'purchase_voucher' => 'OPENING-'.now()->format('Ymd'),
                 'purchase_date' => $date,
                 'purchase_rate' => (float) ($product->pprice ?? 0) / max((float) ($product->uqty ?: 1), 1),
                 'mrp' => (float) $product->mrp,
@@ -152,7 +150,7 @@ class MrpInventoryService
         string $date,
         float $rawQuantity
     ): ?MrpStockLot {
-        if (!$this->enabled()) {
+        if (! $this->enabled()) {
             return null;
         }
 
@@ -191,9 +189,54 @@ class MrpInventoryService
         return $lot;
     }
 
+    public function receiveOpening(
+        Product $product,
+        array $item,
+        int $referenceId,
+        string $date,
+        float $rawQuantity
+    ): ?MrpStockLot {
+        if (! $this->enabled()) {
+            return null;
+        }
+
+        $mrp = round((float) ($item['mrp'] ?? 0), 2);
+        if ($mrp <= 0) {
+            throw ValidationException::withMessages([
+                'opening_stock' => "MRP is required for the opening stock of {$product->product}.",
+            ]);
+        }
+
+        $salePrice = round((float) ($item['sale_price'] ?? $product->price ?? $mrp), 2);
+        if ($salePrice < 0 || $salePrice > $mrp) {
+            throw ValidationException::withMessages([
+                'opening_stock' => "Sale price must be between zero and MRP {$mrp} for {$product->product}.",
+            ]);
+        }
+
+        $marginAmount = round($mrp - $salePrice, 2);
+        $lot = MrpStockLot::create([
+            'product_id' => $product->product_code,
+            'purchase_voucher' => 'OPENING-'.$product->product_code.'-'.now()->format('YmdHisv'),
+            'purchase_date' => $date,
+            'purchase_rate' => round((float) ($item['purchase_rate'] ?? 0), 2),
+            'mrp' => $mrp,
+            'sale_price' => $salePrice,
+            'margin_percentage' => $mrp > 0 ? round(($marginAmount / $mrp) * 100, 2) : 0,
+            'margin_amount' => $marginAmount,
+            'quantity' => $rawQuantity,
+            'available_quantity' => $rawQuantity,
+        ]);
+
+        $this->labelService()->ensureForMrpLot($lot);
+        $this->movement($lot, 'opening', 'opening', $referenceId, null, $date, $rawQuantity, 0);
+
+        return $lot;
+    }
+
     public function applySalePricing(array $items, bool $useMrpAsUnitPrice): array
     {
-        if (!$this->enabled()) {
+        if (! $this->enabled()) {
             return $items;
         }
 
@@ -203,9 +246,9 @@ class MrpInventoryService
 
         return collect($items)->map(function (array $item, int $index) use ($products, $useMrpAsUnitPrice) {
             $product = $products->get((string) ($item['product_id'] ?? ''));
-            $lotId = !empty($item['mrp_stock_lot_id']) ? (int) $item['mrp_stock_lot_id'] : null;
+            $lotId = ! empty($item['mrp_stock_lot_id']) ? (int) $item['mrp_stock_lot_id'] : null;
 
-            if (!$product || !$lotId) {
+            if (! $product || ! $lotId) {
                 return $item;
             }
 
@@ -213,7 +256,7 @@ class MrpInventoryService
                 ->where('product_id', $product->product_code)
                 ->first();
 
-            if (!$lot) {
+            if (! $lot) {
                 throw ValidationException::withMessages([
                     "sale_items.$index.mrp_stock_lot_id" => "The selected MRP stock lot does not belong to {$product->product}.",
                 ]);
@@ -240,11 +283,11 @@ class MrpInventoryService
         string $movementType = 'sale',
         bool $allowOutOfStock = false
     ): Collection {
-        if (!$this->enabled()) {
+        if (! $this->enabled()) {
             return collect();
         }
 
-        if (!$selectedLotId) {
+        if (! $selectedLotId) {
             throw ValidationException::withMessages([
                 'sale_items' => "Select an MRP stock lot for {$product->product}.",
             ]);
@@ -254,7 +297,7 @@ class MrpInventoryService
             ->where('product_id', $product->product_code)
             ->first();
 
-        if (!$selectedLot) {
+        if (! $selectedLot) {
             throw ValidationException::withMessages([
                 'sale_items' => "The selected MRP stock lot does not belong to {$product->product}.",
             ]);
@@ -272,7 +315,7 @@ class MrpInventoryService
             ->get();
         $available = (float) $lots->sum('available_quantity');
 
-        if (!$allowOutOfStock && $available + 0.00001 < $rawQuantity) {
+        if ($available + 0.00001 < $rawQuantity) {
             throw ValidationException::withMessages([
                 'sale_items' => "Insufficient stock in the selected pricing slot at MRP {$selectedLot->mrp}. Available: {$available}.",
             ]);
@@ -305,22 +348,12 @@ class MrpInventoryService
             $remaining -= $quantity;
         }
 
-        if ($remaining > 0.00001 && $allowOutOfStock) {
-            $lot = $lots->firstWhere('id', $selectedLot->id) ?? $lots->first() ?? $selectedLot;
-            $lot = MrpStockLot::whereKey($lot->id)->lockForUpdate()->firstOrFail();
-            $lot->available_quantity = (float) $lot->available_quantity - $remaining;
-            $lot->save();
-            $movements->push($this->movement(
-                $lot, $movementType, $referenceType, $referenceId, $detailId, $date, 0, $remaining, $saleRate
-            ));
-        }
-
         return $movements;
     }
 
     public function reverseReference(string $referenceType, int $referenceId, string $date): void
     {
-        if (!$this->enabled()) {
+        if (! $this->enabled()) {
             return;
         }
 
@@ -340,7 +373,7 @@ class MrpInventoryService
             $net = (float) $movement->quantity_in - (float) $movement->quantity_out;
             $newAvailable = (float) $lot->available_quantity - $net;
             $isDeficitLot = $lot->purchase_voucher === 'OPENING-DEFICIT';
-            if ($newAvailable < -0.00001 && !$isDeficitLot) {
+            if ($newAvailable < -0.00001 && ! $isDeficitLot) {
                 throw ValidationException::withMessages([
                     'mrp_stock' => "MRP lot {$lot->purchase_voucher} has already been used and cannot be reversed.",
                 ]);
@@ -358,7 +391,7 @@ class MrpInventoryService
 
             $this->movement(
                 $lot,
-                $movement->movement_type . '_reversal',
+                $movement->movement_type.'_reversal',
                 $referenceType,
                 $referenceId,
                 $movement->reference_detail_id,
@@ -373,7 +406,7 @@ class MrpInventoryService
 
     public function returnSaleDetail(int $saleDetailId, float $rawQuantity, int $returnId, int $returnDetailId, string $date): void
     {
-        if (!$this->enabled()) {
+        if (! $this->enabled()) {
             return;
         }
 
@@ -426,9 +459,8 @@ class MrpInventoryService
         int $returnDetailId,
         string $date,
         ?float $selectedMrp = null
-    ): ?MrpStockLot
-    {
-        if (!$this->enabled()) {
+    ): ?MrpStockLot {
+        if (! $this->enabled()) {
             return null;
         }
 
@@ -444,7 +476,7 @@ class MrpInventoryService
             ->lockForUpdate()
             ->first();
 
-        if (!$lot) {
+        if (! $lot) {
             $pricing = $this->pricingFromProduct($product, $mrp);
             $lot = MrpStockLot::create([
                 'product_id' => $product->product_code,
@@ -481,7 +513,7 @@ class MrpInventoryService
         $lot->save();
         $this->movement($lot, 'purchase_return', 'purchase_return', $returnId, $returnDetailId, $date, 0, $rawQuantity);
     }
-    
+
     public function saleSelectableLots(string $productCode): Collection
     {
         return MrpStockLot::where('product_id', $productCode)

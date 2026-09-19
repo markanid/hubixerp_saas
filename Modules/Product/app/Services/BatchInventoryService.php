@@ -4,7 +4,6 @@ namespace Modules\Product\app\Services;
 
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Modules\Product\app\Models\BatchMovement;
@@ -14,9 +13,7 @@ use Modules\Settings\app\Models\Company;
 
 class BatchInventoryService
 {
-    public function __construct(private ?InventoryLabelService $inventoryLabels = null)
-    {
-    }
+    public function __construct(private ?InventoryLabelService $inventoryLabels = null) {}
 
     public function enabled(?Product $product = null): bool
     {
@@ -27,6 +24,47 @@ class BatchInventoryService
         return $product === null || (bool) $product->is_batch_managed;
     }
 
+    public function bootstrapExistingStock(): void
+    {
+        Product::with('stock')
+            ->where('is_batch_managed', true)
+            ->orderBy('id')
+            ->each(function (Product $product): void {
+                $rawStock = round((float) ($product->stock?->stock_qty ?? 0), 2);
+                $trackedStock = round((float) StockBatch::where('product_id', $product->product_code)
+                    ->sum('available_quantity'), 2);
+                $difference = round($rawStock - $trackedStock, 2);
+
+                if (abs($difference) <= 0.00001) {
+                    return;
+                }
+                if ($difference < 0) {
+                    throw ValidationException::withMessages([
+                        'inventory_mode' => "{$product->product} has more batch stock than its stock balance. Reconcile it before enabling batch inventory.",
+                    ]);
+                }
+                if ((float) ($product->mrp ?? 0) <= 0) {
+                    throw ValidationException::withMessages([
+                        'inventory_mode' => "{$product->product} has stock but no MRP. Enter its MRP before enabling batch inventory.",
+                    ]);
+                }
+
+                $unitQuantity = max((float) ($product->uqty ?: 1), 1);
+                $batchNumber = substr('OPENING-'.$product->product_code, 0, 100);
+                if (StockBatch::where('product_id', $product->product_code)->where('batch_no', $batchNumber)->exists()) {
+                    $batchNumber = substr($batchNumber.'-'.now()->format('YmdHis'), 0, 100);
+                }
+
+                $this->receiveOpening($product, [
+                    'batch_no' => $batchNumber,
+                    'expiry_date' => null,
+                    'purchase_rate' => round((float) ($product->pprice ?? 0) / $unitQuantity, 2),
+                    'mrp' => (float) $product->mrp,
+                    'sale_price' => (float) ($product->price ?? $product->mrp),
+                ], 0, now()->toDateString(), $difference);
+            });
+    }
+
     public function receivePurchase(
         Product $product,
         array $item,
@@ -35,7 +73,7 @@ class BatchInventoryService
         string $date,
         float $rawQuantity
     ): ?StockBatch {
-        if (!$this->enabled($product)) {
+        if (! $this->enabled($product)) {
             return null;
         }
 
@@ -53,14 +91,14 @@ class BatchInventoryService
 
         $existingBatch = $batch !== null;
 
-        if (!$batch) {
+        if (! $batch) {
             $batch = new StockBatch([
                 'product_id' => $product->product_code,
                 'batch_no' => $batchNo,
                 'quantity' => 0,
                 'available_quantity' => 0,
             ]);
-        } elseif ($batch->expiry_date && !empty($item['expiry_date'])) {
+        } elseif ($batch->expiry_date && ! empty($item['expiry_date'])) {
             $incomingExpiry = $this->normaliseExpiry($item['expiry_date']);
             if ($incomingExpiry !== $batch->expiry_date->toDateString()) {
                 throw ValidationException::withMessages([
@@ -116,6 +154,68 @@ class BatchInventoryService
         return $batch;
     }
 
+    public function receiveOpening(
+        Product $product,
+        array $item,
+        int $referenceId,
+        string $date,
+        float $rawQuantity
+    ): ?StockBatch {
+        if (! $this->enabled($product)) {
+            return null;
+        }
+
+        $batchNo = trim((string) ($item['batch_no'] ?? ''));
+        if ($batchNo === '') {
+            throw ValidationException::withMessages([
+                'opening_stock' => "Batch number is required for the opening stock of {$product->product}.",
+            ]);
+        }
+
+        $batch = StockBatch::where('product_id', $product->product_code)
+            ->where('batch_no', $batchNo)
+            ->lockForUpdate()
+            ->first();
+
+        if ($batch) {
+            throw ValidationException::withMessages([
+                'opening_stock' => "Batch {$batchNo} already exists for {$product->product}.",
+            ]);
+        }
+
+        $mrp = round((float) ($item['mrp'] ?? 0), 2);
+        $salePrice = round((float) ($item['sale_price'] ?? $product->price ?? 0), 2);
+        if ($mrp <= 0) {
+            throw ValidationException::withMessages([
+                'opening_stock' => "MRP is required for batch {$batchNo}.",
+            ]);
+        }
+        if ($salePrice < 0 || $salePrice > $mrp) {
+            throw ValidationException::withMessages([
+                'opening_stock' => "Sale price must be between zero and MRP {$mrp} for batch {$batchNo}.",
+            ]);
+        }
+
+        $batch = new StockBatch([
+            'product_id' => $product->product_code,
+            'batch_no' => $batchNo,
+            'expiry_date' => $this->normaliseExpiry($item['expiry_date'] ?? null),
+            'purchase_rate' => round((float) ($item['purchase_rate'] ?? 0), 2),
+            'mrp' => $mrp,
+            'quantity' => $rawQuantity,
+            'available_quantity' => $rawQuantity,
+        ]);
+        if (Schema::hasColumn('stock_batches', 'sale_price')) {
+            $batch->sale_price = $salePrice;
+        }
+        $batch->save();
+
+        $this->labelService()->ensureForBatch($batch);
+        $this->movement($batch, 'opening', 'opening', $referenceId, null, $date, $rawQuantity, 0);
+
+        return $batch;
+    }
+
     public function allocateSale(
         Product $product,
         float $rawQuantity,
@@ -128,7 +228,7 @@ class BatchInventoryService
         string $movementType = 'sale',
         bool $allowOutOfStock = false
     ): Collection {
-        if (!$this->enabled($product)) {
+        if (! $this->enabled($product)) {
             return collect();
         }
 
@@ -146,7 +246,7 @@ class BatchInventoryService
 
         $batches = $query->lockForUpdate()->get();
         $available = (float) $batches->sum('available_quantity');
-        if (!$allowOutOfStock && $available + 0.00001 < $rawQuantity) {
+        if ($available + 0.00001 < $rawQuantity) {
             throw ValidationException::withMessages([
                 'sale_items' => "Insufficient batch stock for {$product->product}. Available: {$available}.",
             ]);
@@ -202,7 +302,7 @@ class BatchInventoryService
 
             $this->movement(
                 $batch,
-                $movement->movement_type . '_reversal',
+                $movement->movement_type.'_reversal',
                 $referenceType,
                 $referenceId,
                 $movement->reference_detail_id,
@@ -237,7 +337,9 @@ class BatchInventoryService
 
         $remaining = $rawQuantity;
         foreach ($sales as $saleMovement) {
-            if ($remaining <= 0) break;
+            if ($remaining <= 0) {
+                break;
+            }
             $returnedFromMovement = (float) BatchMovement::where('reversal_of_id', $saleMovement->id)
                 ->where('movement_type', 'sale_return')
                 ->whereNotIn('id', BatchMovement::query()
@@ -245,7 +347,9 @@ class BatchInventoryService
                     ->whereNotNull('reversal_of_id'))
                 ->sum('quantity_in');
             $quantity = min($remaining, (float) $saleMovement->quantity_out - $returnedFromMovement);
-            if ($quantity <= 0) continue;
+            if ($quantity <= 0) {
+                continue;
+            }
             $batch = StockBatch::whereKey($saleMovement->stock_batch_id)->lockForUpdate()->firstOrFail();
             $batch->increment('available_quantity', $quantity);
             $this->movement(
@@ -258,7 +362,7 @@ class BatchInventoryService
 
     public function manualSaleReturn(Product $product, float $rawQuantity, int $returnId, int $returnDetailId, string $date): void
     {
-        if (!$this->enabled($product)) {
+        if (! $this->enabled($product)) {
             return;
         }
 
@@ -267,7 +371,7 @@ class BatchInventoryService
             ->lockForUpdate()
             ->first();
 
-        if (!$batch) {
+        if (! $batch) {
             $batch = new StockBatch([
                 'product_id' => $product->product_code,
                 'batch_no' => 'MANUAL-RETURN',
@@ -347,10 +451,13 @@ class BatchInventoryService
 
     public function normaliseExpiry(?string $value): ?string
     {
-        if (!$value) return null;
+        if (! $value) {
+            return null;
+        }
         foreach (['Y-m-d', 'd/m/Y', 'm/Y', 'm/y'] as $format) {
             try {
                 $date = Carbon::createFromFormat($format, $value);
+
                 return in_array($format, ['m/Y', 'm/y'], true)
                     ? $date->endOfMonth()->toDateString()
                     : $date->toDateString();

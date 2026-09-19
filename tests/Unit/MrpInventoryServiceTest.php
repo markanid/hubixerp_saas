@@ -121,6 +121,29 @@ class MrpInventoryServiceTest extends TestCase
         ]);
     }
 
+    public function test_opening_stock_creates_a_sellable_mrp_slot_and_movement(): void
+    {
+        DB::table('company')->insert(['inventory_mode' => 'mrp']);
+        $product = $this->product();
+
+        $lot = $this->service()->receiveOpening($product, [
+            'purchase_rate' => 8,
+            'mrp' => 120,
+            'sale_price' => 110,
+        ], $product->id, '2026-08-01', 25);
+
+        $this->assertNotNull($lot);
+        $this->assertSame(25.0, (float) $lot->available_quantity);
+        $this->assertSame(110.0, (float) $lot->sale_price);
+        $this->assertDatabaseHas('mrp_stock_movements', [
+            'mrp_stock_lot_id' => $lot->id,
+            'movement_type' => 'opening',
+            'reference_type' => 'opening',
+            'reference_id' => $product->id,
+            'quantity_in' => 25,
+        ]);
+    }
+
     public function test_sale_cannot_exceed_the_selected_lot_mrp_or_available_quantity(): void
     {
         DB::table('company')->insert(['inventory_mode' => 'mrp']);
@@ -138,6 +161,18 @@ class MrpInventoryServiceTest extends TestCase
 
         $this->expectException(ValidationException::class);
         $this->service()->allocateSale($product, 6, 3, 3, '2026-08-06', $lot->id, 10);
+    }
+
+    public function test_out_of_stock_setting_does_not_bypass_mrp_slot_availability(): void
+    {
+        DB::table('company')->insert(['inventory_mode' => 'mrp']);
+        $product = $this->product();
+        $lot = $this->service()->receivePurchase(
+            $product, $this->purchaseItem(100), 1, 1, 'PUR-001', '2026-08-06', 5
+        );
+
+        $this->expectException(ValidationException::class);
+        $this->service()->allocateSale($product, 6, 3, 3, '2026-08-06', $lot->id, 10, allowOutOfStock: true);
     }
 
     public function test_sale_return_restores_the_exact_original_mrp_lot(): void
@@ -247,7 +282,7 @@ class MrpInventoryServiceTest extends TestCase
 
     private function service(): MrpInventoryService
     {
-        return new MrpInventoryService();
+        return new MrpInventoryService;
     }
 
     private function product(): Product

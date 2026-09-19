@@ -336,7 +336,9 @@
             product = {...product, mrp_stock_lot_id: lots[0].id, selected_mrp_lot: lots[0]};
         }
 
-        if (!allowOutOfStockSale && parseFloat(product.raw_stock || 0) <= 0) {
+        const trackedInventory = window.mrpInventoryMode === true
+            || (window.batchInventoryMode === true && (product.is_batch_managed === true || product.is_batch_managed == 1));
+        if ((!allowOutOfStockSale || trackedInventory) && parseFloat(product.raw_stock || 0) <= 0) {
             toastr.warning(`${product.product} is out of stock.`);
             return;
         }
@@ -370,7 +372,8 @@
                 mrp_stock_lot_id: mrpStockLotId,
                 stock_mrp: selectedMrpLot ? parseFloat(selectedMrpLot.mrp || 0) : null,
                 raw_stock: selectedMrpLot ? parseFloat(selectedMrpLot.available_quantity || 0) : parseFloat(product.raw_stock || 0),
-                current_stock: selectedMrpLot ? parseFloat(selectedMrpLot.display_quantity || 0) : parseFloat(product.current_stock || 0)
+                current_stock: selectedMrpLot ? parseFloat(selectedMrpLot.display_quantity || 0) : parseFloat(product.current_stock || 0),
+                tracked_inventory: trackedInventory
             });
         }
         enforceCartStock({notify: true});
@@ -431,7 +434,7 @@
         problems.forEach(item => {
             const maxQty = maxDisplayQuantity(item);
             const key = item.product_id + ':' + (item.stock_batch_id || '') + ':' + (item.mrp_stock_lot_id || '');
-            if (allowOutOfStockSale) {
+            if (allowOutOfStockSale && !item.tracked_inventory) {
                 if (notify && !notified.has(key)) {
                     const message = maxQty <= 0
                         ? `${item.name} is out of stock. Sale setting allows continuing.`
@@ -449,11 +452,11 @@
             item.quantity = maxQty > 0 ? maxQty : 0;
         });
 
-        if (!allowOutOfStockSale) {
+        if (!allowOutOfStockSale || problems.some(item => item.tracked_inventory)) {
             cart = cart.filter(item => parseFloat(item.quantity || 0) > 0);
         }
 
-        return allowOutOfStockSale;
+        return allowOutOfStockSale && !problems.some(item => item.tracked_inventory);
     }
 
     function payments() {

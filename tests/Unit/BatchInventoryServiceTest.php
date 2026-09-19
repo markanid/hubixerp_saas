@@ -30,8 +30,16 @@ class BatchInventoryServiceTest extends TestCase
             $table->string('product_code')->unique();
             $table->string('product');
             $table->boolean('is_batch_managed')->default(false);
+            $table->decimal('uqty', 15, 2)->default(1);
+            $table->decimal('pprice', 15, 2)->default(0);
             $table->decimal('mrp', 15, 2)->nullable();
             $table->decimal('price', 15, 2)->nullable();
+        });
+        Schema::create('stock', function (Blueprint $table) {
+            $table->id('stock_id');
+            $table->date('stock_date')->nullable();
+            $table->string('stock_product_id');
+            $table->decimal('stock_qty', 15, 2)->default(0);
         });
         Schema::create('stock_batches', function (Blueprint $table) {
             $table->id();
@@ -70,7 +78,7 @@ class BatchInventoryServiceTest extends TestCase
         DB::table('company')->insert(['inventory_mode' => 'standard']);
         $product = $this->product();
 
-        $result = (new BatchInventoryService())->receivePurchase(
+        $result = (new BatchInventoryService)->receivePurchase(
             $product, ['batch_no' => 'B001'], 1, 1, '2026-06-22', 10
         );
 
@@ -82,7 +90,7 @@ class BatchInventoryServiceTest extends TestCase
     {
         DB::table('company')->insert(['inventory_mode' => 'batch']);
         $product = $this->product();
-        $service = new BatchInventoryService();
+        $service = new BatchInventoryService;
 
         $service->receivePurchase($product, [
             'batch_no' => 'LATE', 'expiry_date' => '03/2027', 'unit_price' => 8, 'mrp' => 12,
@@ -104,11 +112,62 @@ class BatchInventoryServiceTest extends TestCase
         ]);
     }
 
+    public function test_enabling_batch_mode_converts_existing_balance_into_an_opening_batch(): void
+    {
+        DB::table('company')->insert(['inventory_mode' => 'batch']);
+        $product = $this->product();
+        $product->update(['uqty' => 10, 'pprice' => 80, 'mrp' => 120, 'price' => 110]);
+        DB::table('stock')->insert([
+            'stock_date' => '2026-06-22',
+            'stock_product_id' => $product->product_code,
+            'stock_qty' => 30,
+        ]);
+
+        (new BatchInventoryService)->bootstrapExistingStock();
+
+        $this->assertDatabaseHas('stock_batches', [
+            'product_id' => $product->product_code,
+            'batch_no' => 'OPENING-'.$product->product_code,
+            'purchase_rate' => 8,
+            'quantity' => 30,
+            'available_quantity' => 30,
+        ]);
+        $this->assertDatabaseHas('batch_movements', [
+            'movement_type' => 'opening',
+            'reference_type' => 'opening',
+            'quantity_in' => 30,
+        ]);
+    }
+
+    public function test_opening_stock_creates_a_sellable_batch_and_movement(): void
+    {
+        DB::table('company')->insert(['inventory_mode' => 'batch']);
+        $product = $this->product();
+
+        $batch = (new BatchInventoryService)->receiveOpening($product, [
+            'batch_no' => 'OPEN-001',
+            'expiry_date' => '2027-03-31',
+            'purchase_rate' => 8,
+            'mrp' => 12,
+            'sale_price' => 11,
+        ], $product->id, '2026-06-22', 20);
+
+        $this->assertNotNull($batch);
+        $this->assertSame(20.0, (float) $batch->available_quantity);
+        $this->assertDatabaseHas('batch_movements', [
+            'stock_batch_id' => $batch->id,
+            'movement_type' => 'opening',
+            'reference_type' => 'opening',
+            'reference_id' => $product->id,
+            'quantity_in' => 20,
+        ]);
+    }
+
     public function test_existing_batch_number_rejects_a_different_mrp(): void
     {
         DB::table('company')->insert(['inventory_mode' => 'batch']);
         $product = $this->product();
-        $service = new BatchInventoryService();
+        $service = new BatchInventoryService;
 
         $service->receivePurchase($product, [
             'batch_no' => 'B001', 'expiry_date' => '12/2026', 'mrp' => 12,
@@ -124,7 +183,7 @@ class BatchInventoryServiceTest extends TestCase
     {
         DB::table('company')->insert(['inventory_mode' => 'batch']);
         $product = $this->product();
-        $service = new BatchInventoryService();
+        $service = new BatchInventoryService;
 
         $service->receivePurchase($product, [
             'batch_no' => 'B001', 'expiry_date' => '12/2026', 'unit_price' => 8,
@@ -152,7 +211,7 @@ class BatchInventoryServiceTest extends TestCase
     {
         DB::table('company')->insert(['inventory_mode' => 'batch']);
         $product = $this->product();
-        $service = new BatchInventoryService();
+        $service = new BatchInventoryService;
         $batch = $service->receivePurchase($product, [
             'batch_no' => 'B001', 'expiry_date' => '12/2026',
         ], 1, 1, '2026-06-22', 5);
@@ -161,11 +220,24 @@ class BatchInventoryServiceTest extends TestCase
         $service->allocateSale($product, 6, 10, 20, '2026-06-22', $batch->id);
     }
 
+    public function test_out_of_stock_setting_cannot_leave_a_batch_sale_partially_unallocated(): void
+    {
+        DB::table('company')->insert(['inventory_mode' => 'batch']);
+        $product = $this->product();
+        $service = new BatchInventoryService;
+        $service->receivePurchase($product, [
+            'batch_no' => 'B001', 'expiry_date' => '12/2026', 'mrp' => 12,
+        ], 1, 1, '2026-06-22', 5);
+
+        $this->expectException(ValidationException::class);
+        $service->allocateSale($product, 6, 10, 20, '2026-06-22', allowOutOfStock: true);
+    }
+
     public function test_sale_return_restores_the_original_allocated_batches(): void
     {
         DB::table('company')->insert(['inventory_mode' => 'batch']);
         $product = $this->product();
-        $service = new BatchInventoryService();
+        $service = new BatchInventoryService;
         $early = $service->receivePurchase($product, [
             'batch_no' => 'EARLY', 'expiry_date' => '12/2026',
         ], 1, 1, '2026-06-22', 5);
@@ -184,7 +256,7 @@ class BatchInventoryServiceTest extends TestCase
     {
         DB::table('company')->insert(['inventory_mode' => 'batch']);
         $product = $this->product();
-        $service = new BatchInventoryService();
+        $service = new BatchInventoryService;
         $batch = $service->receivePurchase($product, [
             'batch_no' => 'B001', 'expiry_date' => '12/2026',
         ], 1, 1, '2026-06-22', 10);
