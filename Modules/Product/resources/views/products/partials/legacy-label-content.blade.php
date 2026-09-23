@@ -10,7 +10,6 @@
                 @else
                     <div class="barcode-number">Barcode image not available</div>
                 @endif
-                <div class="barcode-number">{{ $product->bar_code }}</div>
             </div>
         @endif
         @if(in_array($codeType, ['qr', 'both'], true))

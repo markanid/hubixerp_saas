@@ -23,11 +23,25 @@ class BarcodeSettingTest extends TestCase
             'label_height_mm' => 40,
         ])['width_mm']);
     }
-    
+
+    public function test_common_roll_layout_uses_one_sticker_as_its_printer_page(): void
+    {
+        $page = BarcodeSetting::pageSize([
+            'layout_mode' => BarcodeSetting::LAYOUT_COMMON,
+            'label_width_mm' => 50,
+            'label_height_mm' => 25,
+        ]);
+
+        $this->assertSame(50.0, $page['width_mm']);
+        $this->assertSame(25.0, $page['height_mm']);
+        $this->assertSame(1, $page['columns']);
+        $this->assertSame(1, $page['capacity']);
+    }
+
     public function test_purchase_price_mask_uses_the_configured_digit_key(): void
     {
         $this->assertSame(
-            'KVMOULIN6X.XU',
+            'KVMOULINEX.XU',
             BarcodeSetting::maskPurchasePrice('1234567890.05')
         );
     }

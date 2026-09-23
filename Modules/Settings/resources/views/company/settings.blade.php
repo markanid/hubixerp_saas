@@ -257,17 +257,8 @@
                                                 <td>
                                                     @if($documentType === 'barcode')
                                                         <input type="hidden" name="print_settings[barcode][paper_size]" value="A4">
-                                                        <div class="d-flex align-items-center" style="gap: 4px; min-width: 145px;">
-                                                            <input id="label_width_mm" type="number" name="label_width_mm" min="20" max="150" class="form-control form-control-sm" value="{{ old('label_width_mm', $thermalLabelSettings['label_width_mm']) }}" title="Label width in millimetres" required>
-                                                            <span>&times;</span>
-                                                            <input id="label_height_mm" type="number" name="label_height_mm" min="15" max="150" class="form-control form-control-sm" value="{{ old('label_height_mm', $thermalLabelSettings['label_height_mm']) }}" title="Label height in millimetres" required>
-                                                        </div>
-                                                        <small class="text-muted">One sticker: width &times; height (mm)</small>
-                                                        <label class="small mt-2 mb-0" for="label_columns">Labels across</label>
-                                                        <input id="label_columns" type="number" name="label_columns" min="1" max="4" class="form-control form-control-sm" value="{{ old('label_columns', $thermalLabelSettings['label_columns'] ?? 1) }}" required>
-                                                        <label class="small mt-1 mb-0" for="label_column_gap_mm">Gap between columns (mm)</label>
-                                                        <input id="label_column_gap_mm" type="number" name="label_column_gap_mm" min="0" max="10" step="0.1" class="form-control form-control-sm" value="{{ old('label_column_gap_mm', $thermalLabelSettings['label_column_gap_mm'] ?? 0) }}" required>
-                                                        <small class="text-muted">Printer paper size must cover one full row. Exclude the gap between rows.</small>
+                                                        <span class="form-control form-control-sm bg-light">Barcode &amp; QR Settings</span>
+                                                        <small class="text-muted">Choose the label roll and dimensions there.</small>
                                                     @else
                                                         <select name="print_settings[{{ $documentType }}][paper_size]" class="form-control form-control-sm">
                                                             @foreach($paperSizes as $value => $label)
@@ -304,8 +295,7 @@
                                                 <td>
                                                     @if($documentType === 'barcode')
                                                         <input type="hidden" name="print_settings[barcode][margin_mm]" value="0">
-                                                        <input id="label_margin_mm" type="number" name="label_margin_mm" min="0" max="10" class="form-control form-control-sm" value="{{ old('label_margin_mm', $thermalLabelSettings['label_margin_mm']) }}" title="Label inner margin in millimetres" required>
-                                                        <small class="text-muted">Inner margin</small>
+                                                        <span class="form-control form-control-sm bg-light">0 (label controlled)</span>
                                                     @else
                                                         <input type="number"
                                                                name="print_settings[{{ $documentType }}][margin_mm]"
@@ -344,7 +334,7 @@
                                 </table>
                             </div>
 
-                            <small class="form-text text-muted">Barcode label dimensions are configured directly in its profile row. Disable Auto Print to preview a document before sending it to Hubix. Printer mappings are maintained per computer below.</small>
+                            <small class="form-text text-muted">Barcode label layout and dimensions are configured in Barcode &amp; QR Settings. Disable Auto Print to preview a document before sending it to Hubix. Printer mappings are maintained per computer below.</small>
 
                             <h5 class="mt-4">Local Print Agents</h5>
                             <hr>
@@ -483,6 +473,65 @@
                         </div>
 
                         <div class="tab-pane fade" id="barcode-settings" role="tabpanel" aria-labelledby="barcode-tab">
+                            <h5>Barcode Label Printing</h5>
+                            <hr>
+
+                            <div class="alert alert-info py-2">
+                                Select the label-roll format used for barcode and QR printing. Both options use the exact sticker dimensions and print at 100% scale.
+                            </div>
+
+                            <div class="form-group" style="max-width: 460px;">
+                                <label for="barcode_layout">Label roll format</label>
+                                <select id="barcode_layout" name="barcode_layout" class="form-control">
+                                    @foreach($barcodeLayouts as $value => $label)
+                                        <option value="{{ $value }}" @selected(old('barcode_layout', $barcodeLayout) === $value)>{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div class="border rounded p-3 mb-3 barcode-layout-panel" data-barcode-layout="thermal">
+                                <h6 class="mb-1">Current custom label-printer layout <span class="badge badge-secondary">Optional</span></h6>
+                                <p class="text-muted small mb-3">Keep using the existing layout when your printer feeds one or more labels across in each row.</p>
+                                <div class="form-row">
+                                    <div class="col-md-3 form-group">
+                                        <label for="label_width_mm">Sticker width (mm)</label>
+                                        <input id="label_width_mm" type="number" name="label_width_mm" min="20" max="150" class="form-control" value="{{ old('label_width_mm', $thermalLabelSettings['label_width_mm']) }}" required>
+                                    </div>
+                                    <div class="col-md-3 form-group">
+                                        <label for="label_height_mm">Sticker height (mm)</label>
+                                        <input id="label_height_mm" type="number" name="label_height_mm" min="15" max="150" class="form-control" value="{{ old('label_height_mm', $thermalLabelSettings['label_height_mm']) }}" required>
+                                    </div>
+                                    <div class="col-md-2 form-group">
+                                        <label for="label_margin_mm">Inner margin (mm)</label>
+                                        <input id="label_margin_mm" type="number" name="label_margin_mm" min="0" max="10" class="form-control" value="{{ old('label_margin_mm', $thermalLabelSettings['label_margin_mm']) }}" required>
+                                    </div>
+                                    <div class="col-md-2 form-group">
+                                        <label for="label_columns">Labels across</label>
+                                        <input id="label_columns" type="number" name="label_columns" min="1" max="4" class="form-control" value="{{ old('label_columns', $thermalLabelSettings['label_columns'] ?? 1) }}" required>
+                                    </div>
+                                    <div class="col-md-2 form-group">
+                                        <label for="label_column_gap_mm">Column gap (mm)</label>
+                                        <input id="label_column_gap_mm" type="number" name="label_column_gap_mm" min="0" max="10" step="0.1" class="form-control" value="{{ old('label_column_gap_mm', $thermalLabelSettings['label_column_gap_mm'] ?? 0) }}" required>
+                                    </div>
+                                </div>
+                                <small class="text-muted">For multiple labels across, set the printer page width to one full row. Do not include the gap between rows in its height.</small>
+                            </div>
+
+                            <div class="border rounded p-3 mb-4 barcode-layout-panel" data-barcode-layout="common">
+                                <h6 class="mb-1">Common sticker-roll label <span class="badge badge-primary">Centred</span></h6>
+                                <p class="text-muted small mb-3">Prints one label per roll position, with the selected fields and barcode centred on the sticker.</p>
+                                <div class="form-row">
+                                    <div class="col-md-3 form-group mb-0">
+                                        <label for="common_label_width_mm">Sticker width (mm)</label>
+                                        <input id="common_label_width_mm" type="number" name="common_label_width_mm" min="20" max="150" class="form-control" value="{{ old('common_label_width_mm', $commonLabelSettings['common_label_width_mm']) }}" required>
+                                    </div>
+                                    <div class="col-md-3 form-group mb-0">
+                                        <label for="common_label_height_mm">Sticker height (mm)</label>
+                                        <input id="common_label_height_mm" type="number" name="common_label_height_mm" min="15" max="150" class="form-control" value="{{ old('common_label_height_mm', $commonLabelSettings['common_label_height_mm']) }}" required>
+                                    </div>
+                                </div>
+                            </div>
+
                             <h5>Barcode / QR Label Content</h5>
                             <hr>
 
@@ -599,8 +648,17 @@
             $('#gst_scheme_group').toggle($('#tax_type').val() === 'gst');
         }
 
+        function toggleBarcodeLayout() {
+            var selectedLayout = $('#barcode_layout').val();
+            $('.barcode-layout-panel').each(function () {
+                $(this).toggleClass('d-none', $(this).data('barcode-layout') !== selectedLayout);
+            });
+        }
+
         $('#tax_type').on('change', toggleGstScheme);
+        $('#barcode_layout').on('change', toggleBarcodeLayout);
         toggleGstScheme();
+        toggleBarcodeLayout();
 
         $('#company-settings-tabs a[data-toggle="pill"]').on('shown.bs.tab', function (event) {
             $('#settings-panel-title').text($(event.target).text().trim());

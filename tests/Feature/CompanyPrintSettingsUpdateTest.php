@@ -6,6 +6,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Modules\Product\app\Services\BatchInventoryService;
 use Modules\Product\app\Services\MrpInventoryService;
 use Modules\Settings\app\Http\Controllers\CompanyController;
 use Tests\TestCase;
@@ -67,6 +68,7 @@ class CompanyPrintSettingsUpdateTest extends TestCase
         });
 
         (require database_path('migrations/2026_09_16_000001_add_barcode_label_columns.php'))->up();
+        (require database_path('migrations/2026_09_20_000001_add_common_barcode_label_layout.php'))->up();
 
         DB::table('company')->insert([
             'id' => 1,
@@ -93,6 +95,9 @@ class CompanyPrintSettingsUpdateTest extends TestCase
             'label_margin_mm' => 3,
             'label_columns' => 2,
             'label_column_gap_mm' => 2.5,
+            'barcode_layout' => 'common',
+            'common_label_width_mm' => 50,
+            'common_label_height_mm' => 25,
             'mask_purchase_price' => 1,
             'print_settings' => [
                 'service' => [
@@ -109,7 +114,8 @@ class CompanyPrintSettingsUpdateTest extends TestCase
 
         app(CompanyController::class)->updateSettings(
             $request,
-            $this->mock(MrpInventoryService::class)
+            $this->mock(MrpInventoryService::class),
+            $this->mock(BatchInventoryService::class)
         );
 
         $this->assertDatabaseHas('print_settings', [
@@ -123,6 +129,9 @@ class CompanyPrintSettingsUpdateTest extends TestCase
             'label_margin_mm' => 3,
             'label_columns' => 2,
             'label_column_gap_mm' => 2.5,
+            'barcode_layout' => 'common',
+            'common_label_width_mm' => 50,
+            'common_label_height_mm' => 25,
             'mask_purchase_price' => 1,
         ]);
     }

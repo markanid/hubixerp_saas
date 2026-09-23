@@ -9,6 +9,14 @@ class BarcodeSetting extends Model
 {
     public const CONTEXT_INVENTORY = 'inventory';
 
+    public const LAYOUT_THERMAL = 'thermal';
+    public const LAYOUT_COMMON = 'common';
+
+    public const LAYOUTS = [
+        self::LAYOUT_THERMAL => 'Custom / thermal label printer',
+        self::LAYOUT_COMMON => 'Common sticker roll label (centred)',
+    ];
+
     public const FIELDS = [
         'product_code' => 'Product Code',
         'product_name' => 'Product Name',
@@ -50,6 +58,9 @@ class BarcodeSetting extends Model
         'label_margin_mm',
         'label_columns',
         'label_column_gap_mm',
+        'barcode_layout',
+        'common_label_width_mm',
+        'common_label_height_mm',
         'auto_print',
         'mask_purchase_price',
     ];
@@ -61,6 +72,8 @@ class BarcodeSetting extends Model
         'label_margin_mm' => 'integer',
         'label_columns' => 'integer',
         'label_column_gap_mm' => 'float',
+        'common_label_width_mm' => 'integer',
+        'common_label_height_mm' => 'integer',
         'auto_print' => 'boolean',
         'mask_purchase_price' => 'boolean',
     ];
@@ -72,6 +85,11 @@ class BarcodeSetting extends Model
         'label_columns' => 1,
         'label_column_gap_mm' => 0,
         'auto_print' => true,
+    ];
+
+    public const COMMON_DEFAULTS = [
+        'common_label_width_mm' => 50,
+        'common_label_height_mm' => 25,
     ];
 
     public static function selectedFields(): array
@@ -108,9 +126,79 @@ class BarcodeSetting extends Model
         ];
     }
 
+    public static function commonSettings(): array
+    {
+        if (!Schema::hasTable('barcode_settings') || !Schema::hasColumn('barcode_settings', 'common_label_width_mm')) {
+            return self::COMMON_DEFAULTS;
+        }
+
+        $setting = self::where('context', self::CONTEXT_INVENTORY)->first();
+
+        return [
+            'common_label_width_mm' => (int) ($setting?->common_label_width_mm ?? self::COMMON_DEFAULTS['common_label_width_mm']),
+            'common_label_height_mm' => (int) ($setting?->common_label_height_mm ?? self::COMMON_DEFAULTS['common_label_height_mm']),
+        ];
+    }
+
+    public static function layoutMode(): string
+    {
+        if (!Schema::hasTable('barcode_settings') || !Schema::hasColumn('barcode_settings', 'barcode_layout')) {
+            return self::LAYOUT_THERMAL;
+        }
+
+        return self::where('context', self::CONTEXT_INVENTORY)->value('barcode_layout') === self::LAYOUT_COMMON
+            ? self::LAYOUT_COMMON
+            : self::LAYOUT_THERMAL;
+    }
+
+    /** Returns the dimensions used by the active barcode printing layout. */
+    public static function activeLabelSettings(): array
+    {
+        $layout = self::layoutMode();
+        $thermal = self::thermalSettings();
+
+        if ($layout !== self::LAYOUT_COMMON) {
+            return array_merge($thermal, [
+                'layout_mode' => self::LAYOUT_THERMAL,
+                'label_rows' => 1,
+                'label_row_gap_mm' => 0,
+            ]);
+        }
+
+        $common = self::commonSettings();
+
+        return [
+            'layout_mode' => self::LAYOUT_COMMON,
+            'label_width_mm' => $common['common_label_width_mm'],
+            'label_height_mm' => $common['common_label_height_mm'],
+            // Reuse the existing label padding so changing layouts never alters it unexpectedly.
+            'label_margin_mm' => $thermal['label_margin_mm'],
+            'label_columns' => 1,
+            'label_rows' => 1,
+            'label_column_gap_mm' => 0,
+            'label_row_gap_mm' => 0,
+            'auto_print' => $thermal['auto_print'],
+        ];
+    }
+
     /** A printer page is one complete row of stickers, excluding the feed gap. */
     public static function pageSize(array $settings): array
     {
+        if (($settings['layout_mode'] ?? self::LAYOUT_THERMAL) === self::LAYOUT_COMMON) {
+            $labelWidth = (float) ($settings['label_width_mm'] ?? self::COMMON_DEFAULTS['common_label_width_mm']);
+            $labelHeight = (float) ($settings['label_height_mm'] ?? self::COMMON_DEFAULTS['common_label_height_mm']);
+
+            return [
+                'width_mm' => $labelWidth,
+                'height_mm' => $labelHeight,
+                'columns' => 1,
+                'rows' => 1,
+                'column_gap_mm' => 0,
+                'row_gap_mm' => 0,
+                'capacity' => 1,
+            ];
+        }
+
         $columns = max(1, min(4, (int) ($settings['label_columns'] ?? 1)));
         $gap = max(0, (float) ($settings['label_column_gap_mm'] ?? 0));
 
@@ -118,7 +206,10 @@ class BarcodeSetting extends Model
             'width_mm' => round((float) $settings['label_width_mm'] * $columns + $gap * ($columns - 1), 2),
             'height_mm' => (float) $settings['label_height_mm'],
             'columns' => $columns,
+            'rows' => 1,
             'column_gap_mm' => $gap,
+            'row_gap_mm' => 0,
+            'capacity' => $columns,
         ];
     }
 

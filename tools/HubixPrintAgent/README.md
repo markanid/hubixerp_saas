@@ -13,7 +13,11 @@ Windows tray agent for silent, printer-specific HubixERP document printing. It u
 
 When **Auto Print** is enabled, opening a print document sends it directly to the mapped printer. Disable **Auto Print** to review the document first and send it only after clicking **Print with Hubix**.
 
-Barcode and QR jobs use the thermal label width and height configured in Company Settings. Label printing requires agent version 1.0.3 or later.
+Barcode and QR jobs use the label-roll format and dimensions configured in **Company Settings → Barcode & QR Settings**. The existing custom label-printer layout uses one complete row: `(sticker width × labels across) + (column gap × (labels across − 1))`, by the sticker height. Do not add the feed gap between rows to the page height. The common sticker-roll layout sends one centred sticker per printer page, using its configured width and height. Labels are printed at 100% scale.
+
+Use agent version 1.0.5 or later for labels; it explicitly selects custom media size in WebView2. Configure the same complete-row paper size in the printer driver and select gap/web media for die-cut rolls. Measure the actual stickers before changing these settings. Browser printing also needs 100% scale, zero margins, and no headers or footers.
+
+Deploy the migrations `2026_09_16_000001_add_barcode_label_columns.php` and `2026_09_20_000001_add_common_barcode_label_layout.php` before saving barcode label settings. Existing configurations keep the custom layout and one label across until explicitly updated.
 
 The server controls the idle polling and heartbeat intervals returned during pairing. The agent immediately checks for another job after each completed print so queued documents are not held behind an additional polling delay.
 

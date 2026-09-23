@@ -60,6 +60,43 @@ class ProductBarcodePrintViewTest extends TestCase
         $this->assertSame(1, substr_count($single, 'class="label"'));
     }
 
+    public function test_common_roll_layout_prints_one_centred_sticker_per_page(): void
+    {
+        $products = collect([1, 2])->map(function ($id) {
+            return (new Product())->forceFill([
+                'id' => $id, 'product_code' => 'PRD_'.$id,
+                'product' => 'Product '.$id, 'bar_code' => '81000000000'.$id,
+                'bcode_image' => 'test.png',
+            ]);
+        });
+        $html = view('product::products.barcode-sheet', [
+            'products' => $products,
+            'codeType' => 'barcode',
+            'barcodeFieldLabels' => ['product_code' => 'Product Code'],
+            'thermalSettings' => [
+                'layout_mode' => 'common',
+                'label_width_mm' => 50,
+                'label_height_mm' => 25,
+                'label_margin_mm' => 2,
+                'label_columns' => 1,
+                'label_column_gap_mm' => 0,
+                'auto_print' => false,
+            ],
+            'currencySymbol' => 'Rs.',
+            'maskPurchasePrice' => false,
+            'page_title' => 'Print Barcodes',
+        ])->render();
+
+        $this->assertStringContainsString('size: 50mm 25mm', $html);
+        $this->assertStringContainsString('.label { justify-content: center; }', $html);
+        $dom = new \DOMDocument();
+        @$dom->loadHTML($html);
+        $xpath = new \DOMXPath($dom);
+        $this->assertSame(2, $xpath->query('//div[@class="label-row"]')->length);
+        $this->assertSame(1, $xpath->query('(//div[@class="label-row"])[1]/div[@class="label"]')->length);
+        $this->assertSame(1, $xpath->query('(//div[@class="label-row"])[2]/div[@class="label"]')->length);
+    }
+
     public function test_legacy_print_views_only_render_selected_barcode_fields(): void
     {
         $product = new Product();

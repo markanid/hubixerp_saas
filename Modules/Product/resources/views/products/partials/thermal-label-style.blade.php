@@ -2,6 +2,7 @@
     $labelWidth = (float) $thermalSettings['label_width_mm'];
     $labelHeight = (float) $thermalSettings['label_height_mm'];
     $labelMargin = (float) $thermalSettings['label_margin_mm'];
+    $commonRoll = ($thermalSettings['layout_mode'] ?? \Modules\Settings\app\Models\BarcodeSetting::LAYOUT_THERMAL) === \Modules\Settings\app\Models\BarcodeSetting::LAYOUT_COMMON;
     $compact = $labelWidth <= 50 || $labelHeight <= 30;
     $barcodeHeight = min(13, max(4, $labelHeight * 0.27));
     $qrSize = min(24, max(8, $labelHeight - 2 * $labelMargin - 8));
@@ -33,6 +34,9 @@
         text-align: center;
         min-width: 0;
     }
+    @if($commonRoll)
+    .label { justify-content: center; }
+    @endif
     .product-meta, .meta {
         flex: 1 1 auto;
         min-height: 0;
@@ -40,6 +44,9 @@
         font-size: {{ $compact ? 7.5 : 9 }}px;
         line-height: 1.05;
     }
+    @if($commonRoll)
+    .product-meta, .meta { flex: 0 1 auto; }
+    @endif
     .label-field { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .product-name { font-weight: bold; }
     .heading-short { display: none; }
@@ -58,7 +65,7 @@
     .barcode img { display: block; width: 100%; height: {{ $barcodeHeight }}mm; object-fit: fill; image-rendering: pixelated; }
     .qr img { display: block; width: {{ $qrSize }}mm; height: {{ $qrSize }}mm; object-fit: contain; }
     .barcode-number, .number { font-size: {{ $compact ? 7.5 : 9 }}px; line-height: 1.1; margin-top: .2mm; white-space: nowrap; }
-    @if(!$compact && $codeType !== 'barcode')
+    @if(!$compact && $codeType !== 'barcode' && !$commonRoll)
     .label[data-inventory] { flex-direction: row; align-items: center; gap: 2mm; }
     .label[data-inventory] .meta { flex: 1; min-width: 0; }
     .label[data-inventory] .codes { flex: 1.35; }

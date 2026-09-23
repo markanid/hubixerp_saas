@@ -105,7 +105,10 @@ class CompanyController extends Controller
         $data['printHeaderModes'] = self::PRINT_HEADER_MODES;
         $data['barcodeFields'] = BarcodeSetting::FIELDS;
         $data['selectedBarcodeFields'] = BarcodeSetting::selectedFields();
+        $data['barcodeLayouts'] = BarcodeSetting::LAYOUTS;
+        $data['barcodeLayout'] = BarcodeSetting::layoutMode();
         $data['thermalLabelSettings'] = BarcodeSetting::thermalSettings();
+        $data['commonLabelSettings'] = BarcodeSetting::commonSettings();
         $data['maskPurchasePrice'] = BarcodeSetting::purchasePriceMaskEnabled();
         $data['printAgents'] = Schema::hasTable('print_agents')
             ? PrintAgent::with('mappings')->orderByDesc('is_default')->orderBy('name')->get()
@@ -226,6 +229,9 @@ class CompanyController extends Controller
             'label_margin_mm' => ['required', 'integer', 'min:0', 'max:10'],
             'label_columns' => ['sometimes', 'required', 'integer', 'min:1', 'max:4'],
             'label_column_gap_mm' => ['sometimes', 'required', 'numeric', 'min:0', 'max:10', 'decimal:0,1'],
+            'barcode_layout' => ['required', Rule::in(array_keys(BarcodeSetting::LAYOUTS))],
+            'common_label_width_mm' => ['required', 'integer', 'min:20', 'max:150'],
+            'common_label_height_mm' => ['required', 'integer', 'min:15', 'max:150'],
             'mask_purchase_price' => ['nullable', 'boolean'],
             'print_settings' => ['nullable', 'array'],
             'print_settings.*.print_method' => ['required', Rule::in(array_keys(PrintSetting::PRINT_METHODS))],
@@ -252,15 +258,18 @@ class CompanyController extends Controller
         $selectedSaleFields = $validated['sale_fields'] ?? [];
         $selectedEstimationFields = $validated['estimation_fields'] ?? [];
         $selectedBarcodeFields = array_values(array_unique($validated['barcode_fields']));
-        $thermalLabelSettings = [
+        $barcodeLabelSettings = [
             'label_width_mm' => $validated['label_width_mm'],
             'label_height_mm' => $validated['label_height_mm'],
             'label_margin_mm' => $validated['label_margin_mm'],
+            'barcode_layout' => $validated['barcode_layout'],
+            'common_label_width_mm' => $validated['common_label_width_mm'],
+            'common_label_height_mm' => $validated['common_label_height_mm'],
             'mask_purchase_price' => ! empty($validated['mask_purchase_price']),
         ];
         foreach (['label_columns', 'label_column_gap_mm'] as $key) {
             if (array_key_exists($key, $validated)) {
-                $thermalLabelSettings[$key] = $validated[$key];
+                $barcodeLabelSettings[$key] = $validated[$key];
             }
         }
         $submittedPrintSettings = $validated['print_settings'] ?? [];
@@ -273,6 +282,9 @@ class CompanyController extends Controller
             $validated['label_margin_mm'],
             $validated['label_columns'],
             $validated['label_column_gap_mm'],
+            $validated['barcode_layout'],
+            $validated['common_label_width_mm'],
+            $validated['common_label_height_mm'],
             $validated['mask_purchase_price'],
             $validated['print_settings']
         );
@@ -310,7 +322,7 @@ class CompanyController extends Controller
 
         BarcodeSetting::updateOrCreate(
             ['context' => BarcodeSetting::CONTEXT_INVENTORY],
-            array_merge(['selected_fields' => $selectedBarcodeFields], $thermalLabelSettings)
+            array_merge(['selected_fields' => $selectedBarcodeFields], $barcodeLabelSettings)
         );
 
         foreach (PrintSetting::DOCUMENTS as $documentType => $label) {

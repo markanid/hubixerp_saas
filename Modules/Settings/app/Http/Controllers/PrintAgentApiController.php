@@ -167,7 +167,7 @@ class PrintAgentApiController extends Controller
 
         $settingType = $job->document_type === 'test' ? 'sale' : $job->document_type;
         $setting = PrintSetting::forDocument($settingType);
-        $thermalSettings = $job->document_type === 'barcode' ? BarcodeSetting::thermalSettings() : null;
+        $thermalSettings = $job->document_type === 'barcode' ? BarcodeSetting::activeLabelSettings() : null;
         $labelPageSize = $thermalSettings ? BarcodeSetting::pageSize($thermalSettings) : null;
 
         return response()->json([
