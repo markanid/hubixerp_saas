@@ -299,6 +299,7 @@ class PurchaseController extends Controller
         $data['gstScheme']      = $taxProfile['gst_scheme'];
         $data['isComposition']  = $taxProfile['is_composition'];
         $data['collectTax']     = $taxProfile['collect_tax'];
+        $data['inventoryMode']  = Company::query()->value('inventory_mode') ?? 'standard';
         $data['purchaseItemLabels'] = $this->purchaseItemLabels($purchase);
         return view('purchase::purchases.view',$data);
     }
@@ -318,6 +319,7 @@ class PurchaseController extends Controller
         $data['gstScheme']      = $taxProfile['gst_scheme'];
         $data['isComposition']  = $taxProfile['is_composition'];
         $data['collectTax']     = $taxProfile['collect_tax'];
+        $data['inventoryMode']  = Company::query()->value('inventory_mode') ?? 'standard';
         $data['purchaseItemLabels'] = $this->purchaseItemLabels($purchase);
         return view('purchase::purchases.view',$data);
     }
