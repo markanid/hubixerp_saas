@@ -111,8 +111,9 @@ class ProductController extends Controller
         $data['batchMode'] = $inventoryMode === 'batch';
         $data['isUsed'] = $isUsed;
         $data['openingStockEditable'] = ! $isUsed && ! $hasTrackedRows && $legacyStockRaw >= 0;
-        $data['stockEditable'] = ! $isUsed
-            && (! $usesTrackedInventory || $data['openingStockEditable']);
+        $data['stockEditable'] = $inventoryMode === 'standard'
+            ? (! $id || (int) $product->typeid === 2)
+            : (! $isUsed && (! $usesTrackedInventory || $data['openingStockEditable']));
         $data['openingBalanceToAllocate'] = $legacyStockRaw > 0
             ? round($legacyStockRaw / max((float) ($product->uqty ?: 1), 1), 2)
             : null;
@@ -352,8 +353,10 @@ class ProductController extends Controller
                 $stockWasSubmitted
             )) {
                 $stockQty = (float) $savedProduct->uqty * $submittedStock;
-                $stockModel = Stock::firstOrNew(['stock_product_id' => $savedProduct->product_code]);
-                $existingQty = $stockModel->exists ? $stockModel->stock_qty : 0;
+                $stockModel = Stock::where('stock_product_id', $savedProduct->product_code)
+                    ->lockForUpdate()
+                    ->first() ?? new Stock(['stock_product_id' => $savedProduct->product_code]);
+                $existingQty = (float) ($stockModel->stock_qty ?? 0);
 
                 if ($stockQty != $existingQty) {
                     $stockModel->stock_qty = $stockQty;
@@ -362,13 +365,22 @@ class ProductController extends Controller
 
                     $diffQty = $stockQty - $existingQty;
                     if ($diffQty != 0) {
-                        StockLedger::updateStockLedger(
-                            now()->toDateString(),
-                            $savedProduct->product_code,
-                            $diffQty,
-                            $savedProduct->id,
-                            $isNew ? 'INIT' : 'ADJUST'
-                        );
+                        if ($isNew) {
+                            StockLedger::updateStockLedger(
+                                now()->toDateString(),
+                                $savedProduct->product_code,
+                                $diffQty,
+                                $savedProduct->id,
+                                'INIT'
+                            );
+                        } else {
+                            StockLedger::updateProductAdjustmentLedger(
+                                now()->toDateString(),
+                                $savedProduct->product_code,
+                                $diffQty,
+                                $savedProduct->id
+                            );
+                        }
                     }
                 }
             }

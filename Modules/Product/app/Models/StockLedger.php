@@ -69,6 +69,53 @@ class StockLedger extends Model
         }
     }
 
+    /**
+     * Apply a product-master stock edit to its dedicated adjustment entry.
+     *
+     * Operational entries (purchase, sale, return, etc.) are deliberately not
+     * changed. Reusing the product's ADJUST entry makes later product edits
+     * update the same ledger source, identified by item, type, and reference.
+     */
+    public static function updateProductAdjustmentLedger($date, $itemId, $qty, $refId): void
+    {
+        $adjustment = self::where('stock_item_id', $itemId)
+            ->where('stock_type', 'ADJUST')
+            ->where('stock_ref_id', $refId)
+            ->lockForUpdate()
+            ->latest('stock_date')
+            ->latest('id')
+            ->first();
+
+        if (! $adjustment) {
+            self::updateStockLedger($date, $itemId, $qty, $refId, 'ADJUST');
+
+            return;
+        }
+
+        $netQuantity = (float) $adjustment->stock_in - (float) $adjustment->stock_out + (float) $qty;
+        $adjustment->stock_in = $netQuantity > 0 ? $netQuantity : 0;
+        $adjustment->stock_out = $netQuantity < 0 ? abs($netQuantity) : 0;
+        $adjustment->save();
+
+        self::recalculateItemBalances($itemId);
+    }
+
+    private static function recalculateItemBalances($itemId): void
+    {
+        $runningBalance = 0;
+        $entries = self::where('stock_item_id', $itemId)
+            ->orderBy('stock_date')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        foreach ($entries as $entry) {
+            $runningBalance += (float) $entry->stock_in - (float) $entry->stock_out;
+            $entry->stock_balance = $runningBalance;
+            $entry->save();
+        }
+    }
+
     public static function deleteStockLedgerEntry($itemId, $refId, $fromDate)
     {
         // Step 1: Delete the specific stock ledger entry using the reference ID

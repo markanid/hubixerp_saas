@@ -91,7 +91,7 @@ class ProductStockServiceTest extends TestCase
 
         $this->assertTrue($this->service->canApplyDirectAdjustment($product, 'standard', false, false, true));
         $this->assertFalse($this->service->canApplyDirectAdjustment($product, 'standard', false, false, false));
-        $this->assertFalse($this->service->canApplyDirectAdjustment($product, 'standard', false, true, true));
+        $this->assertTrue($this->service->canApplyDirectAdjustment($product, 'standard', false, true, true));
         $this->assertFalse($this->service->canApplyDirectAdjustment($product, 'mrp', false, false, true));
         $this->assertFalse($this->service->canApplyDirectAdjustment($product, 'batch', true, false, true));
 

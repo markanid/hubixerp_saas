@@ -183,7 +183,7 @@
                     <label>Stock Qty</label>
                     <input type="text" name="stock_qty" id="stock_qty" tabindex="15" class="form-control"
                         value="{{ old('stock_qty', $stockQty) }}" {{ !$stockEditable ? 'disabled' : '' }}>
-                    @if($isUsed)
+                    @if($isUsed && $inventoryMode !== 'standard')
                         <small class="text-muted">Stock is locked because this product has inventory transactions. Use the related transaction or stock adjustment workflow.</small>
                     @elseif($inventoryMode === 'mrp' && $openingStockEditable)
                         <small class="text-muted">Creates an opening MRP slot using the purchase price, MRP and sale price above.</small>

@@ -69,8 +69,8 @@ class ProductStockService
     ): bool {
         return $stockWasSubmitted
             && (int) $product->typeid === 2
+            && $inventoryMode === 'standard'
             && !$wasTracked
-            && !$hasTransactions
             && !$this->usesTrackedInventory($product, $inventoryMode);
     }
 }
