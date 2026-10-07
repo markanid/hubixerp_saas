@@ -27,7 +27,7 @@ class EstimationBillingService
     {
     }
 
-    public function applyEffects(Estimation $estimation): void
+    public function applyEffects(Estimation $estimation, bool $preserveLedger = false): void
     {
         if (! (bool) $estimation->es_account_effect) {
             return;
@@ -91,7 +91,8 @@ class EstimationBillingService
             );
         }
 
-        LedgerBook::setEstimationLedgerBook(
+        if (!$preserveLedger) {
+            LedgerBook::setEstimationLedgerBook(
             $estimation->es_amount_payable,
             $estimation->es_amount_paid,
             $estimation->es_date,
@@ -107,10 +108,11 @@ class EstimationBillingService
             Banking::updateCreditBanking($estimation->es_paymode, $estimation->es_amount_paid, $estimation->es_date);
         }
 
+        }
         $this->refreshClosings();
     }
 
-    public function removeEffects(Estimation $estimation, ?Collection $details = null): void
+    public function removeEffects(Estimation $estimation, ?Collection $details = null, bool $preserveLedger = false): void
     {
         if (! (bool) $estimation->es_account_effect) {
             return;
@@ -122,17 +124,19 @@ class EstimationBillingService
         $this->batchInventory->reverseReference('estimation', $estimation->es_id, $estimation->es_date);
         $this->mrpInventory->reverseReference('estimation', $estimation->es_id, $estimation->es_date);
 
-        LedgerBook::releaseCustomerPaymentAllocationsForSource($estimation->es_customer, $estimation->es_id, ['es']);
-        LedgerBook::where('lb_vid', $estimation->es_id)
-            ->whereIn('lb_type', ['es', 'esp'])
-            ->delete();
-        LedgerBook::recalculateCustomerLedger($estimation->es_customer, $estimation->es_date);
+        if (!$preserveLedger) {
+            LedgerBook::releaseCustomerPaymentAllocationsForSource($estimation->es_customer, $estimation->es_id, ['es']);
+            LedgerBook::where('lb_vid', $estimation->es_id)
+                ->whereIn('lb_type', ['es', 'esp'])
+                ->delete();
+            LedgerBook::recalculateCustomerLedger($estimation->es_customer, $estimation->es_date);
 
         if ((float) $estimation->es_amount_paid > 0 && $estimation->es_paymode) {
             // Balance::updateDebitBalance($estimation->es_date, $estimation->es_paymode, $estimation->es_amount_paid);
             Banking::updateDebitBanking($estimation->es_paymode, $estimation->es_amount_paid, $estimation->es_date);
         }
 
+        }
         $this->refreshClosings();
     }
 

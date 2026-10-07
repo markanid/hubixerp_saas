@@ -2,6 +2,7 @@
 
 namespace Modules\Returns\app\Services;
 
+use App\Support\FinancialYear;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -38,11 +39,13 @@ class SaleReturnService
     {
         return DB::transaction(function () use ($data) {
             $returnDate = Carbon::createFromFormat('d/m/Y', $data['pr_date'])->toDateString();
+            FinancialYear::assertDate($returnDate, 'pr_date');
             $calculation = $this->calculate($data['return_items']);
             $amountPaid = $this->validatedAmountPaid($data, $calculation['amount_payable']);
             $sale = $this->originalSale($data['pr_pvno'] ?? null);
 
             if ($sale) {
+                FinancialYear::assertRecord($sale, 'sa_date', 'pr_pvno');
                 $this->assertOriginalSaleMatches($sale, (int) $data['pr_vendor']);
                 $this->assertReturnableQuantities($sale, $calculation['items'], $data['pr_id'] ?? null);
             }
@@ -50,23 +53,32 @@ class SaleReturnService
             $return = !empty($data['pr_id'])
                 ? Returns::whereKey($data['pr_id'])->lockForUpdate()->firstOrFail()
                 : null;
+            $isUpdate = $return !== null;
 
-            if ($return) {
+            if ($isUpdate) {
+                FinancialYear::assertRecord($return, 'pr_date', 'pr_id');
                 $this->assertActiveSaleReturn($return);
                 $oldDetails = ReturnDetail::where('prd_prid', $return->pr_id)->lockForUpdate()->get();
                 $oldCustomer = (int) $return->pr_vendor;
                 $oldDate = $return->pr_date;
                 $oldPaymode = (int) $return->pr_paymode;
                 $oldPaid = (float) $return->pr_amount_paid;
+                if ($oldCustomer !== (int) $data['pr_vendor']) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'pr_vendor' => 'The customer cannot be changed after a sale return has been created.',
+                    ]);
+                }
+
 
                 $this->lockOperationalRows($calculation['items'], $oldDetails->pluck('prd_itemid')->all(), (int) $data['pr_paymode'], $oldPaymode);
                 $this->reverseStock($return, $oldDetails, $oldDate);
                 $this->batchInventory->reverseReference('sale_return', (int) $return->pr_id, $oldDate);
                 $this->mrpInventory->reverseReference('sale_return', (int) $return->pr_id, $oldDate);
                 $return->returnDetails()->delete();
-                $this->removeFinancialEntries($return, $oldCustomer, $oldDate);
-                // Balance::updateCreditBalance($oldDate, $oldPaymode, $oldPaid);
-                Banking::updateCreditBanking($oldPaymode, $oldPaid, $oldDate);
+                $paymentSummary = \App\Support\DocumentLedgerReconciler::summary(
+                    $return->pr_id, 'sr', 'srp', $oldCustomer, false
+                );
+                $amountPaid = $paymentSummary['total_paid'];
 
                 $return->update($this->returnData($data, $calculation, $returnDate, $amountPaid));
             } else {
@@ -75,7 +87,14 @@ class SaleReturnService
             }
 
             $this->createDetailsAndApplyStock($return, $calculation['items'], $returnDate, $sale);
-            $this->applyFinancialEntries($return);
+            if ($isUpdate) {
+                \App\Support\DocumentLedgerReconciler::reconcile(
+                    $return->pr_id, 'sr', 'srp', (int) $return->pr_vendor, false, $returnDate,
+                    $return->pr_amount_payable, (int) $return->pr_paymode, (string) $return->pr_vno
+                );
+            } else {
+                $this->applyFinancialEntries($return);
+            }
             $this->refreshClosings();
 
             return $return->fresh(['returnDetails.product', 'customer', 'user', 'banking']);
@@ -289,6 +308,7 @@ class SaleReturnService
         return Sale::with('saleDetails.product')
             ->where('sa_vno', $voucher)
             ->where('status', '1')
+            ->where('financial_year', FinancialYear::active())
             ->first();
     }
 

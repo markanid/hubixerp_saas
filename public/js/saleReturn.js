@@ -610,8 +610,8 @@ $(document).ready(function() {
         $('#footer_gst_value').html('Rs. ' + newGST.toLocaleString('en-IN', { minimumFractionDigits: 2 }));
     }
 
-    $('#reservationdate').datetimepicker({
+    $('#reservationdate').datetimepicker($.extend({
         format: 'DD/MM/YYYY'
-    });
+    }, window.financialYearPickerOptions || {}));
 
 });

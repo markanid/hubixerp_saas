@@ -34,6 +34,11 @@ class InventoryValuationService
         return array_map(static fn (float $value): float => round($value, 2), $totals);
     }
 
+    public function purchaseValue(?string $inventoryMode = null): float
+    {
+        return $this->totals($inventoryMode)['purchase_value'];
+    }
+
     public function mrpValue(?string $inventoryMode = null): float
     {
         return $this->totals($inventoryMode)['mrp_value'];

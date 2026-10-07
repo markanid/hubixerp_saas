@@ -3,6 +3,7 @@
 namespace Modules\Estimation\app\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Support\FinancialYear;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -12,6 +13,7 @@ use Modules\Estimation\app\Models\EstimationDetail;
 use Modules\Estimation\app\Models\EstimationSetting;
 use Modules\Estimation\app\Services\EstimationBillingService;
 use Modules\Finance\app\Models\Banking;
+use Modules\Finance\app\Models\LedgerBook;
 use Modules\Product\app\Models\Product;
 use Modules\Product\app\Services\MrpInventoryService;
 use Modules\Settings\app\Models\Company;
@@ -174,7 +176,7 @@ class EstimationController extends Controller
         $company = Company::first();
         $estimation   = null;
         if ($id) {
-            $estimation = Estimation::with(['estimationDetails.product','estimationDetails.mrpStockLot','customer','user','banking'])->findOrFail($id);
+            $estimation = Estimation::with(['estimationDetails.product','estimationDetails.mrpStockLot','customer','user','banking'])->where('financial_year', FinancialYear::active())->findOrFail($id);
             $voucher_no = $estimation->es_vno;
             $page_title = "Edit Estimation";
         } else {
@@ -295,6 +297,7 @@ class EstimationController extends Controller
             DB::beginTransaction(); 
         
             $estimationDate = Carbon::createFromFormat('d/m/Y', $request->es_date)->format('Y-m-d');
+            FinancialYear::assertDate($estimationDate, 'es_date');
             $estimationItems = json_decode($request->estimation_items, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
                 throw new \Exception('Invalid estimation items format.');
@@ -348,11 +351,46 @@ class EstimationController extends Controller
                 'es_paid'           => $accountEffectEnabled ? ($balance <= 0 ? 'FP' : ($amountPaid > 0 ? 'HP' : 'NP')) : null,
                 'es_user'           => $request->es_user,
             ];
+            $preserveFinancialLedger = false;
             
             if ($isUpdate) {
                 $estimation = Estimation::whereKey($request->es_id)->lockForUpdate()->firstOrFail();
+                FinancialYear::assertRecord($estimation, 'es_date', 'es_id');
+
+                if ((int) $estimation->es_customer !== (int) $request->es_customer) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'es_customer' => 'The customer cannot be changed after an account-affecting estimation has been created.',
+                    ]);
+                }
+
+                $preserveFinancialLedger = $accountEffectEnabled && (bool) $estimation->es_account_effect;
+                if ($preserveFinancialLedger) {
+                    $paymentSummary = \App\Support\DocumentLedgerReconciler::summary(
+                        $estimation->es_id, 'es', 'esp', (int) $estimation->es_customer, false
+                    );
+                    $amountPaid = $paymentSummary['total_paid'];
+                    if ($amountPaid > $amountPayable) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'es_amount_payable' => 'The revised total cannot be less than payments already recorded for this estimation.',
+                        ]);
+                    }
+
+                    $balance = round($amountPayable - $amountPaid, 2);
+                    if ($balance > 0 && !$request->filled('es_due_days') && (string) ($request->es_due_days ?? '') !== '0') {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'es_due_days' => 'Due days is required when the estimation is not fully paid.',
+                        ]);
+                    }
+                    $dueDays = $balance > 0 ? (int) $request->es_due_days : null;
+                    $estimationData['es_amount_paid'] = $amountPaid;
+                    $estimationData['es_balance'] = $balance;
+                    $estimationData['es_due_days'] = $dueDays;
+                    $estimationData['es_due_date'] = $dueDays !== null ? Carbon::parse($estimationDate)->addDays($dueDays)->toDateString() : null;
+                    $estimationData['es_paid'] = $balance <= 0 ? 'FP' : ($amountPaid > 0 ? 'HP' : 'NP');
+                }
+
                 $oldDetails = EstimationDetail::where('esd_sid', $estimation->es_id)->lockForUpdate()->get();
-                $this->billingService->removeEffects($estimation, $oldDetails);
+                $this->billingService->removeEffects($estimation, $oldDetails, $preserveFinancialLedger);
                 $estimation->update($estimationData);
                 $estimation->estimationDetails()->delete();
             } else {
@@ -383,7 +421,15 @@ class EstimationController extends Controller
             } catch (\Exception $e) {
                 throw $e;
             }         
-            $this->billingService->applyEffects($estimation->fresh(['estimationDetails']));
+            $freshEstimation = $estimation->fresh(['estimationDetails']);
+            $this->billingService->applyEffects($freshEstimation, $preserveFinancialLedger);
+            if ($preserveFinancialLedger) {
+                \App\Support\DocumentLedgerReconciler::reconcile(
+                    $freshEstimation->es_id, 'es', 'esp', (int) $freshEstimation->es_customer, false, $estimationDate,
+                    $freshEstimation->es_amount_payable, (int) $freshEstimation->es_paymode, (string) $freshEstimation->es_vno
+                );
+                LedgerBook::recalculateCustomerLedger((int) $freshEstimation->es_customer);
+            }
             DB::commit();
             return redirect()->route('estimations.show', $estimationID)->with('success', 'Estimation saved successfully!');
         } catch (\Exception $e) {

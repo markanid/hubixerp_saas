@@ -744,9 +744,9 @@ $(document).ready(function() {
         productSelector = null;
     });
 
-    $('#reservationdate').datetimepicker({
+    $('#reservationdate').datetimepicker($.extend({
         format: 'DD/MM/YYYY'
-    });
+    }, window.financialYearPickerOptions || {}));
 
     updatePurchaseReturnSummary();
 });

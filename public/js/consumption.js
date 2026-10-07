@@ -395,7 +395,7 @@ $(document).ready(function() {
         $('#footer_total_amount').text(formatCurrency(totalAmount));
     }
 
-    $('#reservationdate').datetimepicker({
+    $('#reservationdate').datetimepicker($.extend({
         format: 'DD/MM/YYYY'
-    });
+    }, window.financialYearPickerOptions || {}));
 });

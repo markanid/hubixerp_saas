@@ -3,6 +3,7 @@
 namespace Modules\Finance\app\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Support\FinancialYear;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -51,6 +52,7 @@ class LoanController extends Controller
 
         try {
             $loanDate = Carbon::createFromFormat('d/m/Y', $validated['loan_date'])->format('Y-m-d');
+            FinancialYear::assertDate($loanDate, 'loan_date');
             $loan = Loan::create([
                 'loan_vno' => $validated['loan_vno'],
                 'loan_date' => $loanDate,

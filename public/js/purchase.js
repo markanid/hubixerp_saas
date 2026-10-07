@@ -903,9 +903,9 @@ $(document).ready(function() {
         updatePaymentDueDaysVisibility();
     }
 
-    $('#reservationdate').datetimepicker({
+    $('#reservationdate').datetimepicker($.extend({
         format: 'DD/MM/YYYY'
-    });
+    }, window.financialYearPickerOptions || {}));
     
      $('#pu_type').on('change', function() {
         let pu_type = $(this).val();

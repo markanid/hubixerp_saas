@@ -2,6 +2,7 @@
 
 namespace Modules\Sale\app\Services;
 
+use App\Support\FinancialYear;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -40,6 +41,7 @@ class SaleService
                 (bool) (SaleSetting::values()['mrp_pricing_mode'] ?? false)
             );
             $saleDate = Carbon::createFromFormat('d/m/Y', $data['sa_date'])->toDateString();
+            FinancialYear::assertDate($saleDate, 'sa_date');
             $calculation = $this->calculator->calculate($data['sale_items'], (string) $data['sa_type'], $this->shouldCollectTax($data));
             $this->lockOperationalRows($calculation['items'], [], (int) $data['sa_paymode']);
             $allowOutOfStock = $this->allowsOutOfStockSale();
@@ -75,6 +77,7 @@ class SaleService
                 (bool) (SaleSetting::values()['mrp_pricing_mode'] ?? false)
             );
             $sale = Sale::whereKey($sale->getKey())->lockForUpdate()->firstOrFail();
+            FinancialYear::assertRecord($sale, 'sa_date', 'sa_id');
             $this->assertActive($sale);
 
             $oldDetails = SaleDetail::where('sad_sid', $sale->sa_id)->lockForUpdate()->get();
@@ -83,6 +86,7 @@ class SaleService
             $oldPaymode = (int) $sale->sa_paymode;
             $oldPaid = (float) $sale->sa_amount_paid;
             $saleDate = Carbon::createFromFormat('d/m/Y', $data['sa_date'])->toDateString();
+            FinancialYear::assertDate($saleDate, 'sa_date');
             $calculation = $this->calculator->calculate($data['sale_items'], (string) $data['sa_type'], $this->shouldCollectTax($data));
             $allowOutOfStock = $this->allowsOutOfStockSale();
 
@@ -97,24 +101,30 @@ class SaleService
                 $this->assertStockAvailable($calculation['items'], $this->rawQuantities($oldDetails));
             }
 
+            if ($oldCustomer !== (int) $data['sa_customer']) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'sa_customer' => 'The customer cannot be changed after a sale has been created.',
+                ]);
+            }
+
             $this->reverseStock($sale, $oldDetails, $oldDate);
             $this->batchInventory->reverseReference('sale', $sale->sa_id, $oldDate);
             $this->mrpInventory->reverseReference('sale', $sale->sa_id, $oldDate);
             $sale->saleDetails()->delete();
-            $this->removeFinancialEntries($sale, $oldCustomer, $oldDate);
-            // Balance::updateDebitBalance($oldDate, $oldPaymode, $oldPaid);
-            Banking::updateDebitBanking($oldPaymode, $oldPaid, $oldDate);
 
-            $amountPaid = $this->validatedAmountPaid($data, $calculation['amount_payable']);
+            $paymentSummary = \App\Support\DocumentLedgerReconciler::summary(
+                $sale->sa_id, 's', 'sp', $oldCustomer, false
+            );
+            $amountPaid = $paymentSummary['total_paid'];
             $due = $this->dueData($data, $calculation['amount_payable'], $amountPaid, $saleDate);
             $sale->update($this->saleData($data, $calculation, $saleDate, $amountPaid, $due));
             $this->createDetailsAndApplyStock($sale, $calculation['items'], $saleDate, $allowOutOfStock);
-            $this->applyFinancialEntries($sale);
+            \App\Support\DocumentLedgerReconciler::reconcile(
+                $sale->sa_id, 's', 'sp', $oldCustomer, false, $saleDate,
+                $sale->sa_amount_payable, (int) $sale->sa_paymode, (string) $sale->sa_vno
+            );
 
             LedgerBook::recalculateCustomerLedger($oldCustomer);
-            if ($oldCustomer !== (int) $sale->sa_customer) {
-                LedgerBook::recalculateCustomerLedger((int) $sale->sa_customer);
-            }
 
             $this->refreshClosings();
 

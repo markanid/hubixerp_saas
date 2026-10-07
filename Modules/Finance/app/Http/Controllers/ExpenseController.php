@@ -3,6 +3,7 @@
 namespace Modules\Finance\app\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Support\FinancialYear;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -101,7 +102,7 @@ class ExpenseController extends Controller
         $excategories   = Excategory::all();
         $expense        = null;
         if ($id) {
-            $expense = Expense::with(['excategory','user','banking'])->findOrFail($id);
+            $expense = Expense::with(['excategory','user','banking'])->where('financial_year', FinancialYear::active())->findOrFail($id);
             $voucher_no = $expense->exp_vno;
             $page_title = "Edit Expense";
         } else {
@@ -140,6 +141,7 @@ class ExpenseController extends Controller
             DB::beginTransaction(); 
         
             $expenseDate = Carbon::createFromFormat('d/m/Y', $request->exdate)->format('Y-m-d');
+            FinancialYear::assertDate($expenseDate, 'exdate');
             
             $expenseData = [
                 'exdate'        => $expenseDate,
@@ -159,6 +161,7 @@ class ExpenseController extends Controller
 
             if ($isUpdate) {
                 $expense = Expense::findOrFail($request->id);
+                FinancialYear::assertRecord($expense, 'exdate', 'id');
                 $oldExpenseDate = $expense->exdate;
                 $oldPaymode = $expense->ex_paymode;
                 $oldAmount = $expense->amount;

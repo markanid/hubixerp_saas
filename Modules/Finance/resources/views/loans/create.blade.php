@@ -115,9 +115,9 @@
 <script>
 $(function () {
     $('#loan_date').focus();
-    $('#loan_date_picker').datetimepicker({
+     $('#loan_date_picker').datetimepicker($.extend({
         format: 'DD/MM/YYYY'
-    });
+    }, window.financialYearPickerOptions || {}));
 
     function togglePartyField() {
         if ($('#loan_type').val() === 'asset') {

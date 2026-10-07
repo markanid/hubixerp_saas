@@ -2,6 +2,7 @@
 
 namespace Modules\Purchase\app\Services;
 
+use App\Support\FinancialYear;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -35,6 +36,7 @@ class PurchaseService
     {
         return DB::transaction(function () use ($data) {
             $purchaseDate = Carbon::createFromFormat('d/m/Y', $data['pu_date'])->toDateString();
+            FinancialYear::assertDate($purchaseDate, 'pu_date');
             $calculation = $this->calculator->calculate($data['purchase_items'], (string) $data['pu_type'], $this->shouldCollectTax());
             $this->lockOperationalRows($calculation['items'], [], (int) $data['pu_paymode']);
             $amountPaid = $this->validatedAmountPaid($data, $calculation['amount_payable']);
@@ -61,6 +63,7 @@ class PurchaseService
     {
         return DB::transaction(function () use ($purchase, $data) {
             $purchase = Purchase::whereKey($purchase->getKey())->lockForUpdate()->firstOrFail();
+            FinancialYear::assertRecord($purchase, 'pu_date', 'pu_id');
             $this->assertActive($purchase);
 
             $oldDetails = PurchaseDetail::where('pud_pid', $purchase->pu_id)->lockForUpdate()->get();
@@ -69,6 +72,7 @@ class PurchaseService
             $oldPaymode = (int) $purchase->pu_paymode;
             $oldPaid = (float) $purchase->pu_amount_paid;
             $purchaseDate = Carbon::createFromFormat('d/m/Y', $data['pu_date'])->toDateString();
+            FinancialYear::assertDate($purchaseDate, 'pu_date');
             $calculation = $this->calculator->calculate($data['purchase_items'], (string) $data['pu_type'], $this->shouldCollectTax());
 
             $this->lockOperationalRows(
@@ -78,24 +82,30 @@ class PurchaseService
                 $oldPaymode
             );
 
+            if ($oldVendor !== (int) $data['pu_vendor']) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'pu_vendor' => 'The supplier cannot be changed after a purchase has been created.',
+                ]);
+            }
+
+
             $this->reverseStock($purchase, $oldDetails, $oldDate);
             $this->batchInventory->reverseReference('purchase', $purchase->pu_id, $oldDate);
             $this->mrpInventory->reverseReference('purchase', $purchase->pu_id, $oldDate);
             $purchase->purchaseDetails()->delete();
-            $this->removeFinancialEntries($purchase, $oldVendor, $oldDate);
-            // Balance::updateCreditBalance($oldDate, $oldPaymode, $oldPaid);
-            Banking::updateCreditBanking($oldPaymode, $oldPaid, $oldDate);
-
-            $amountPaid = $this->validatedAmountPaid($data, $calculation['amount_payable']);
+            $paymentSummary = \App\Support\DocumentLedgerReconciler::summary(
+                $purchase->pu_id, 'p', 'pp', $oldVendor, true
+            );
+            $amountPaid = $paymentSummary['total_paid'];
             $due = $this->dueData($data, $calculation['amount_payable'], $amountPaid, $purchaseDate);
             $purchase->update($this->purchaseData($data, $calculation, $purchaseDate, $amountPaid, $due));
             $this->createDetailsAndApplyStock($purchase, $calculation['items'], $purchaseDate);
-            $this->applyFinancialEntries($purchase);
+            \App\Support\DocumentLedgerReconciler::reconcile(
+                $purchase->pu_id, 'p', 'pp', $oldVendor, true, $purchaseDate,
+                $purchase->pu_amount_payable, (int) $purchase->pu_paymode, (string) $purchase->pu_vno
+            );
 
             LedgerBook::recalculateVendorLedger($oldVendor, $oldDate, null);
-            if ($oldVendor !== (int) $purchase->pu_vendor) {
-                LedgerBook::recalculateVendorLedger((int) $purchase->pu_vendor, $purchaseDate, null);
-            }
 
             $this->refreshClosings();
 

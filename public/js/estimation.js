@@ -828,9 +828,9 @@ $(document).ready(function() {
         updatePaymentSummary();
     });
 
-    $('#reservationdate').datetimepicker({
+    $('#reservationdate').datetimepicker($.extend({
         format: 'DD/MM/YYYY'
-    });
+    }, window.financialYearPickerOptions || {}));
 
     updatePaymentSummary();
 

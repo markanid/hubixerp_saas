@@ -2,6 +2,7 @@
 
 namespace Modules\Returns\app\Services;
 
+use App\Support\FinancialYear;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -37,11 +38,13 @@ class PurchaseReturnService
     {
         return DB::transaction(function () use ($data) {
             $returnDate = Carbon::createFromFormat('d/m/Y', $data['pr_date'])->toDateString();
+            FinancialYear::assertDate($returnDate, 'pr_date');
             $calculation = $this->calculate($data['return_items']);
             $amountPaid = $this->validatedAmountPaid($data, $calculation['amount_payable']);
             $purchase = $this->originalPurchase($data['pr_pvno'] ?? null);
 
             if ($purchase) {
+                FinancialYear::assertRecord($purchase, 'pu_date', 'pr_pvno');
                 $this->assertOriginalPurchaseMatches($purchase, (int) $data['pr_vendor']);
                 $this->assertReturnableQuantities($purchase, $calculation['items'], $data['pr_id'] ?? null);
             }
@@ -49,8 +52,10 @@ class PurchaseReturnService
             $return = !empty($data['pr_id'])
                 ? Returns::whereKey($data['pr_id'])->lockForUpdate()->firstOrFail()
                 : null;
+            $isUpdate = $return !== null;
 
             if ($return) {
+                FinancialYear::assertRecord($return, 'pr_date', 'pr_id');
                 $this->assertActivePurchaseReturn($return);
                 $oldDetails = ReturnDetail::where('prd_prid', $return->pr_id)->lockForUpdate()->get();
                 $oldVendor = (int) $return->pr_vendor;
@@ -58,14 +63,21 @@ class PurchaseReturnService
                 $oldPaymode = (int) $return->pr_paymode;
                 $oldPaid = (float) $return->pr_amount_paid;
 
+                if ($oldVendor !== (int) $data['pr_vendor']) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'pr_vendor' => 'The supplier cannot be changed after a purchase return has been created.',
+                    ]);
+                }
+
                 $this->lockOperationalRows($calculation['items'], $oldDetails->pluck('prd_itemid')->all(), (int) $data['pr_paymode'], $oldPaymode);
                 $this->reverseStock($return, $oldDetails, $oldDate);
                 $this->batchInventory->reverseReference('purchase_return', (int) $return->pr_id, $oldDate);
                 $this->mrpInventory->reverseReference('purchase_return', (int) $return->pr_id, $oldDate);
                 $return->returnDetails()->delete();
-                $this->removeFinancialEntries($return, $oldVendor, $oldDate);
-                // Balance::updateDebitBalance($oldDate, $oldPaymode, $oldPaid);
-                Banking::updateDebitBanking($oldPaymode, $oldPaid, $oldDate);
+                $paymentSummary = \App\Support\DocumentLedgerReconciler::summary(
+                    $return->pr_id, 'pr', 'prp', $oldVendor, true
+                );
+                $amountPaid = $paymentSummary['total_paid'];
 
                 $return->update($this->returnData($data, $calculation, $returnDate, $amountPaid));
             } else {
@@ -74,7 +86,14 @@ class PurchaseReturnService
             }
 
             $this->createDetailsAndApplyStock($return, $calculation['items'], $returnDate, $purchase);
-            $this->applyFinancialEntries($return);
+            if ($isUpdate) {
+                \App\Support\DocumentLedgerReconciler::reconcile(
+                    $return->pr_id, 'pr', 'prp', (int) $return->pr_vendor, true, $returnDate,
+                    $return->pr_amount_payable, (int) $return->pr_paymode, (string) $return->pr_vno
+                );
+            } else {
+                $this->applyFinancialEntries($return);
+            }
             $this->refreshClosings();
 
             return $return->fresh(['returnDetails.product', 'vendor', 'user', 'banking']);
@@ -287,6 +306,7 @@ class PurchaseReturnService
 
         return Purchase::with('purchaseDetails.product')
             ->where('pu_status', '1')
+            ->where('financial_year', FinancialYear::active())
             ->where(function ($query) use ($voucher) {
                 $query->where('pu_vno', $voucher)
                     ->orWhere('pu_bill_number', $voucher);

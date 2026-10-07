@@ -1258,9 +1258,9 @@ $(document).ready(function() {
         updatePaymentDueDaysVisibility();
     }
 
-    $('#reservationdate').datetimepicker({
+    $('#reservationdate').datetimepicker($.extend({
         format: 'DD/MM/YYYY'
-    });
+    }, window.financialYearPickerOptions || {}));
     
      $('#sa_type').on('change', function() {
         let sa_type = $(this).val();

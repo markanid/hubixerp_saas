@@ -3,6 +3,7 @@
 namespace Modules\Consumption\app\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Support\FinancialYear;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -142,7 +143,7 @@ class ConsumptionController extends Controller
         $consumption   = null;
         $company = Company::first();
         if ($id) {
-            $consumption = Consumption::with(['consumptionDetails.product', 'consumptionDetails.batchMovements.batch', 'consumptionDetails.mrpStockLot', 'user'])->findOrFail($id);
+            $consumption = Consumption::with(['consumptionDetails.product', 'consumptionDetails.batchMovements.batch', 'consumptionDetails.mrpStockLot', 'user'])->where('financial_year', FinancialYear::active())->findOrFail($id);
             $voucher_no = $consumption->con_vno;
             $page_title = "Edit Consumption";
         } else {
@@ -251,6 +252,7 @@ class ConsumptionController extends Controller
             DB::beginTransaction(); 
         
             $consumptionDate = Carbon::createFromFormat('d/m/Y', $request->con_date)->format('Y-m-d');
+            FinancialYear::assertDate($consumptionDate, 'con_date');
             $consumptionItems = json_decode($request->consumption_items, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
                 return redirect()->back()->with('error', 'Invalid consumption items format.');
@@ -266,6 +268,7 @@ class ConsumptionController extends Controller
             
             if ($isUpdate) {
                 $consumption = Consumption::whereKey($request->con_id)->lockForUpdate()->firstOrFail();
+                FinancialYear::assertRecord($consumption, 'con_date', 'con_id');
                 $oldDate = $consumption->con_date;
                 $consumption->update($consumptionData);
 

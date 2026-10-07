@@ -384,7 +384,7 @@
         {{-- SUMMARY --}}
         <div class="row mt-3">
 
-            <div class="col-md-5">
+            <div class="col-lg-5">
 
                 <div class="card card-navy">
 
@@ -468,7 +468,7 @@
             </div>
 
             {{-- BANK BALANCE --}}
-            <div class="col-md-7">
+            <div class="col-lg-7">
 
                 <div class="card card-info">
 
@@ -476,66 +476,72 @@
                         <h3 class="card-title">
                             <i class="fas fa-university"></i> Bank Balances
                             @if(!empty($bankBalanceDate))
-                                <small>as on {{ date('d-m-Y', strtotime($bankBalanceDate)) }}</small>
+                                <small class="d-block d-sm-inline ml-sm-1">
+                                    as on {{ date('d-m-Y', strtotime($bankBalanceDate)) }}
+                                </small>
                             @endif
                         </h3>
                     </div>
 
                     <div class="card-body p-0">
 
-                        <table class="table table-bordered table-striped mb-0">
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-striped mb-0">
 
-                            <thead>
-                                <tr>
-                                    <th>S/N</th>
-                                    <th>Bank Name</th>
-                                    <th>Snapshot Date</th>
-                                    <th class="text-right">Balance</th>
-                                </tr>
-                            </thead>
+                                <thead>
+                                    <tr>
+                                        <th style="width: 60px;">S/N</th>
+                                        <th>Bank Name</th>
+                                        <th class="text-nowrap">Snapshot Date</th>
+                                        <th class="text-right text-nowrap">Balance</th>
+                                    </tr>
+                                </thead>
 
-                            <tbody>
-
-                                @php
-                                    $slno2 = 1;
-                                    $banksum = 0;
-                                @endphp
-
-                                @foreach($banks as $bank)
+                                <tbody>
 
                                     @php
-                                        $banksum += $bank->db_amount;
+                                        $slno2 = 1;
+                                        $banksum = 0;
                                     @endphp
 
+                                    @foreach($banks as $bank)
+
+                                        @php
+                                            $banksum += $bank->db_amount;
+                                        @endphp
+
+                                        <tr>
+                                            <td>{{ $slno2++ }}</td>
+
+                                            <td>{{ $bank->banking->bk_bank ?? '' }}</td>
+
+                                            <td class="text-nowrap">
+                                                {{ \Carbon\Carbon::parse($bank->db_date)->format('d-m-Y') }}
+                                            </td>
+
+                                            <td class="text-right text-nowrap">
+                                                Rs. {{ number_format($bank->db_amount,2) }}
+                                            </td>
+                                        </tr>
+
+                                    @endforeach
+
+                                </tbody>
+
+                                <tfoot>
                                     <tr>
-                                        <td>{{ $slno2++ }}</td>
+                                        <th colspan="3" class="text-right">
+                                            Bank Total
+                                        </th>
 
-                                        <td>{{ $bank->banking->bk_bank ?? '' }}</td>
-
-                                        <td>{{ \Carbon\Carbon::parse($bank->db_date)->format('d-m-Y') }}</td>
-
-                                        <td class="text-right">
-                                            Rs. {{ number_format($bank->db_amount,2) }}
-                                        </td>
+                                        <th class="text-right text-danger text-nowrap">
+                                            Rs. {{ number_format($banksum,2) }}
+                                        </th>
                                     </tr>
+                                </tfoot>
 
-                                @endforeach
-
-                            </tbody>
-
-                            <tfoot>
-                                <tr>
-                                    <th colspan="3" class="text-right">
-                                        Bank Total
-                                    </th>
-
-                                    <th class="text-right text-danger">
-                                        Rs. {{ number_format($banksum,2) }}
-                                    </th>
-                                </tr>
-                            </tfoot>
-
-                        </table>
+                            </table>
+                        </div>
 
                     </div>
 
@@ -565,9 +571,9 @@
 <script>
     $(function () {
 
-        $('#report_date').datetimepicker({
+        $('#report_date').datetimepicker($.extend({
             format: 'DD/MM/YYYY'
-        });
+        }, window.financialYearPickerOptions || {}));
 
     });
 </script>

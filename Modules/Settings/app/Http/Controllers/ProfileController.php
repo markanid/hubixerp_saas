@@ -22,7 +22,7 @@ class ProfileController extends Controller
      */
     public function dashboard(){
         $data['productsCount'] = DB::table('product')->count();
-        $data['stockValue'] = $this->inventoryValuation->mrpValue();
+        $data['stockValue'] = $this->inventoryValuation->purchaseValue();
         $data['customersCount'] = DB::table('customer')->count();
         $data['purchaseCount'] = DB::table('purchase')->count();
         $data['saleCount'] = DB::table('sales')->count();

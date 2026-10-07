@@ -3,6 +3,7 @@
 namespace Modules\Contacts\app\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Support\FinancialYear;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -137,6 +138,7 @@ class VendorController extends Controller
         $payMode    = $request->paymode;
         $paytype    = $request->paytype;
         $payDate    = Carbon::createFromFormat('d/m/Y', $request->pay_date)->format('Y-m-d');
+        FinancialYear::assertDate($payDate, 'pay_date');
         $allocations = $this->preparePaymentAllocations($request, $vendorId, $paytype, $amount);
 
         DB::beginTransaction();
@@ -260,6 +262,7 @@ class VendorController extends Controller
         }
 
         $sourceLedgers = LedgerBook::where('lb_payee', $vendorId)
+            ->where('financial_year', FinancialYear::active())
             ->where('status', '1')
             ->whereIn('lb_type', $this->allocationTypesForPayment($paytype))
             ->whereIn('lb_id', $inputAllocations->keys()->all())
@@ -311,6 +314,7 @@ class VendorController extends Controller
 
         return LedgerBook::with('banking')
             ->where('lb_payee', $vendorId)
+            ->where('financial_year', FinancialYear::active())
             ->where('status', '1')
             ->whereIn('lb_type', $this->allocationTypesForPayment($paytype))
             ->where('lb_vid', '!=', 0)

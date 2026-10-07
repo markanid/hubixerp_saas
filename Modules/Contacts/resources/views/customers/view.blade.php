@@ -735,9 +735,9 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         @endif
         
-        $('#reservationdate').datetimepicker({
+        $('#reservationdate').datetimepicker($.extend({
             format: 'DD/MM/YYYY'
-        });
+        }, window.financialYearPickerOptions || {}));
     });
 
     $('#fixLedgerBtn').click(function () {

@@ -77,6 +77,7 @@ class InventoryValuationServiceTest extends TestCase
             'sale_value' => 241.0,
             'mrp_value' => 270.0,
         ], $this->service()->totals());
+        $this->assertSame(210.0, $this->service()->purchaseValue());
     }
 
     public function test_mrp_mode_values_each_available_lot_at_its_own_mrp(): void

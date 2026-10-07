@@ -395,6 +395,18 @@
 <script src="{{ asset('admin-assets/plugins/toastr/toastr.min.js') }}"></script>
 
 
+@php($financialYearPickerOptions = \App\Support\FinancialYear::pickerOptions())
+<script>
+  window.financialYearPickerOptions = {
+    minDate: moment(@json($financialYearPickerOptions['minDate']), 'YYYY-MM-DD'),
+    maxDate: moment(@json($financialYearPickerOptions['maxDate']), 'YYYY-MM-DD'),
+    useCurrent: false
+  };
+  window.financialYearDateBounds = {
+    min: @json($financialYearPickerOptions['minDate']),
+    max: @json($financialYearPickerOptions['maxDate'])
+  };
+</script>
 @yield('scripts')
 <script>
   $(function () {
@@ -415,8 +427,12 @@
     // });
     //Date and time picker
     $('#reservationdatetime').datetimepicker({ icons: { time: 'far fa-clock' } });
-    $('#reservationdate').datetimepicker({
+    $('#report_date').datetimepicker($.extend({
         format: 'DD/MM/YYYY'
+    }, window.financialYearPickerOptions));
+    $('input[type="date"][name="from_date"], input[type="date"][name="to_date"]').attr({
+      min: window.financialYearDateBounds.min,
+      max: window.financialYearDateBounds.max
     });
     
   });

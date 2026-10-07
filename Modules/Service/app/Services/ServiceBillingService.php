@@ -2,6 +2,7 @@
 
 namespace Modules\Service\app\Services;
 
+use App\Support\FinancialYear;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -40,6 +41,7 @@ class ServiceBillingService
                 (bool) (SaleSetting::values()['mrp_pricing_mode'] ?? false)
             );
             $serviceDate = Carbon::createFromFormat('d/m/Y', $data['sv_date'])->toDateString();
+            FinancialYear::assertDate($serviceDate, 'sv_date');
             $calculation = $this->calculator->calculate($data['sale_items'] ?? [], $data['service_items'] ?? [], (string) $data['sv_type'], $this->shouldCollectTax($data));
             $this->lockOperationalRows($calculation['sale_items'], [], (int) $data['sv_paymode']);
             $allowOutOfStock = $this->allowsOutOfStockSale();
@@ -75,6 +77,7 @@ class ServiceBillingService
                 (bool) (SaleSetting::values()['mrp_pricing_mode'] ?? false)
             );
             $service = Service::whereKey($service->getKey())->lockForUpdate()->firstOrFail();
+            FinancialYear::assertRecord($service, 'sv_date', 'sv_id');
             $this->assertActive($service);
 
             $oldDetails = ServiceDetail::where('svd_sid', $service->sv_id)->lockForUpdate()->get();
@@ -84,6 +87,7 @@ class ServiceBillingService
             $oldPaymode = (int) $service->sv_paymode;
             $oldPaid = (float) $service->sv_amount_paid;
             $serviceDate = Carbon::createFromFormat('d/m/Y', $data['sv_date'])->toDateString();
+            FinancialYear::assertDate($serviceDate, 'sv_date');
             $calculation = $this->calculator->calculate($data['sale_items'] ?? [], $data['service_items'] ?? [], (string) $data['sv_type'], $this->shouldCollectTax($data));
             $allowOutOfStock = $this->allowsOutOfStockSale();
 
@@ -98,24 +102,30 @@ class ServiceBillingService
                 $this->assertStockAvailable($calculation['sale_items'], $this->rawQuantities($oldSaleDetails));
             }
 
+            if ($oldCustomer !== (int) $data['sv_customer']) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'sv_customer' => 'The customer cannot be changed after a service invoice has been created.',
+                ]);
+            }
+
             $this->reverseStock($service, $oldSaleDetails, $oldDate);
             $this->batchInventory->reverseReference('service', $service->sv_id, $oldDate);
             $this->mrpInventory->reverseReference('service', $service->sv_id, $oldDate);
             $service->serviceDetails()->delete();
-            $this->removeFinancialEntries($service, $oldCustomer);
-            // Balance::updateDebitBalance($oldDate, $oldPaymode, $oldPaid);
-            Banking::updateDebitBanking($oldPaymode, $oldPaid, $oldDate);
 
-            $amountPaid = $this->validatedAmountPaid($data, $calculation['amount_payable']);
+            $paymentSummary = \App\Support\DocumentLedgerReconciler::summary(
+                $service->sv_id, 'sv', 'svp', $oldCustomer, false
+            );
+            $amountPaid = $paymentSummary['total_paid'];
             $due = $this->dueData($data, $calculation['amount_payable'], $amountPaid, $serviceDate);
             $service->update($this->serviceData($data, $calculation, $serviceDate, $amountPaid, $due));
             $this->createDetailsAndApplyStock($service, $calculation, $serviceDate, $allowOutOfStock);
-            $this->applyFinancialEntries($service);
+            \App\Support\DocumentLedgerReconciler::reconcile(
+                $service->sv_id, 'sv', 'svp', $oldCustomer, false, $serviceDate,
+                $service->sv_amount_payable, (int) $service->sv_paymode, (string) $service->sv_vno
+            );
 
             LedgerBook::recalculateCustomerLedger($oldCustomer);
-            if ($oldCustomer !== (int) $service->sv_customer) {
-                LedgerBook::recalculateCustomerLedger((int) $service->sv_customer);
-            }
 
             $this->refreshClosings();
 

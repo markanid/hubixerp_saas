@@ -180,9 +180,9 @@
 $(function () {
     $('.select2').select2({ width: '100%' });
 
-    $('#reservationdate').datetimepicker({
+    $('#reservationdate').datetimepicker($.extend({
         format: 'DD/MM/YYYY'
-    });
+    }, window.financialYearPickerOptions || {}));
 
     bsCustomFileInput.init();
 

@@ -1150,9 +1150,9 @@ $(document).ready(function() {
         calculateTotals();
     });
 
-    $('#reservationdate').datetimepicker({
+    $('#reservationdate').datetimepicker($.extend({
         format: 'DD/MM/YYYY'
-    });
+    }, window.financialYearPickerOptions || {}));
 
     $('#sv_type').on('change', function () {
         resetServiceTotals();
