@@ -56,15 +56,17 @@
         <div class="card-body">
             <form method="get" action="{{ route('reports.summary', $type) }}">
                 <div class="row">
+@if($type !== 'outstanding')
                     <div class="col-md-3">
                         <div class="form-group">
                             <label>From Date</label>
                             <input type="date" name="from_date" value="{{ $from_date }}" min="{{ $fy_start }}" max="{{ $fy_end }}" class="form-control">
                         </div>
                     </div>
+@endif
                     <div class="col-md-3">
                         <div class="form-group">
-                            <label>To Date</label>
+                            <label>{{ $type === 'outstanding' ? 'As of Date' : 'To Date' }}</label>
                             <input type="date" name="to_date" value="{{ $to_date }}" min="{{ $fy_start }}" max="{{ $fy_end }}" class="form-control">
                         </div>
                     </div>
@@ -145,6 +147,7 @@
                                                     @foreach($actions as $action)
                                                         <a href="{{ $action['url'] }}" class="btn btn-xs {{ $action['class'] }} btn-flat" title="{{ $action['label'] }}">
                                                             <i class="{{ $action['icon'] }}"></i>
+                                                            @if($type === 'outstanding') View @endif
                                                         </a>
                                                     @endforeach
                                                 </td>

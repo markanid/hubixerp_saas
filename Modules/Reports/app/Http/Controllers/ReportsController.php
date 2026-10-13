@@ -555,67 +555,24 @@ class ReportsController extends Controller
 
     private function outstandingReport(array $dates): array
     {
-        $sales = Sale::with('customer')
-            ->where('financial_year', $this->financialYear())
-            ->where('status', '1')
-            ->where('sa_balance', '>', 0)
-            ->whereBetween('sa_date', [$dates['from'], $dates['to']])
-            ->latest('sa_date')
-            ->limit(300)
-            ->get();
-
-        $services = Service::with('customer')
-            ->where('financial_year', $this->financialYear())
-            ->where('status', '1')
-            ->where('sv_balance', '>', 0)
-            ->whereBetween('sv_date', [$dates['from'], $dates['to']])
-            ->latest('sv_date')
-            ->limit(300)
-            ->get();
-
-        $estimations = Estimation::with('customer')
-            ->where('financial_year', $this->financialYear())
-            ->where('status', '1')
-            ->where('es_account_effect', true)
-            ->where('es_balance', '>', 0)
-            ->whereBetween('es_date', [$dates['from'], $dates['to']])
-            ->latest('es_date')
-            ->limit(300)
-            ->get();
-
-        $purchases = Purchase::with('vendor')
-            ->where('financial_year', $this->financialYear())
-            ->where('pu_status', '1')
-            ->where('pu_balance', '>', 0)
-            ->whereBetween('pu_date', [$dates['from'], $dates['to']])
-            ->latest('pu_date')
-            ->limit(300)
-            ->get();
-
+        $customers = \App\Support\OutstandingReport::rows(false, $dates['fy_start'], $dates['to']);
+        $suppliers = \App\Support\OutstandingReport::rows(true, $dates['fy_start'], $dates['to']);
+        $columns = fn ($party) => [
+            ['key' => 'party', 'label' => $party],
+            ['key' => 'particular', 'label' => 'Particular'],
+            ['key' => 'balance', 'label' => 'Balance', 'type' => 'amount'],
+        ];
         return [
             'cards' => [
-                ['label' => 'Sale Receivable', 'value' => $sales->sum('sa_balance'), 'type' => 'amount'],
-                ['label' => 'Service Receivable', 'value' => $services->sum('sv_balance'), 'type' => 'amount'],
-                ['label' => 'Estimation Receivable', 'value' => $estimations->sum('es_balance'), 'type' => 'amount'],
-                ['label' => 'Purchase Payable', 'value' => $purchases->sum('pu_balance'), 'type' => 'amount'],
+                ['label' => 'Customer Outstanding', 'value' => array_sum(array_column($customers, 'balance')), 'type' => 'amount'],
+                ['label' => 'Supplier Outstanding', 'value' => array_sum(array_column($suppliers, 'balance')), 'type' => 'amount'],
             ],
             'sections' => [
-                ['title' => 'Sale Outstanding', 'columns' => $this->outstandingColumns('Customer'), 'rows' => $sales->map(fn ($sale) => [
-                    'date' => $sale->sa_date, 'vno' => $sale->sa_vno, 'party' => $sale->customer->customer ?? '', 'due_date' => $sale->sa_due_date, 'payable' => $sale->sa_amount_payable, 'paid' => $sale->sa_amount_paid, 'balance' => $sale->sa_balance, '_actions' => $this->transactionActions('sales', $sale->sa_id, ['show', 'edit', 'print']),
-                ])],
-                ['title' => 'Service Outstanding', 'columns' => $this->outstandingColumns('Customer'), 'rows' => $services->map(fn ($service) => [
-                    'date' => $service->sv_date, 'vno' => $service->sv_vno, 'party' => $service->customer->customer ?? '', 'due_date' => $service->sv_due_date, 'payable' => $service->sv_amount_payable, 'paid' => $service->sv_amount_paid, 'balance' => $service->sv_balance, '_actions' => $this->transactionActions('services', $service->sv_id, ['show', 'edit', 'print']),
-                ])],
-                ['title' => 'Estimation Outstanding', 'columns' => $this->outstandingColumns('Customer'), 'rows' => $estimations->map(fn ($estimation) => [
-                    'date' => $estimation->es_date, 'vno' => $estimation->es_vno, 'party' => $estimation->customer->customer ?? '', 'due_date' => $estimation->es_due_date, 'payable' => $estimation->es_amount_payable, 'paid' => $estimation->es_amount_paid, 'balance' => $estimation->es_balance, '_actions' => $this->transactionActions('estimations', $estimation->es_id, ['show', 'edit', 'print']),
-                ])],
-                ['title' => 'Purchase Outstanding', 'columns' => $this->outstandingColumns('Supplier'), 'rows' => $purchases->map(fn ($purchase) => [
-                    'date' => $purchase->pu_date, 'vno' => $purchase->pu_vno, 'party' => $purchase->vendor->cp_name ?? '', 'due_date' => $purchase->pu_due_date, 'payable' => $purchase->pu_amount_payable, 'paid' => $purchase->pu_amount_paid, 'balance' => $purchase->pu_balance, '_actions' => $this->transactionActions('purchases', $purchase->pu_id, ['show', 'edit', 'print']),
-                ])],
+                ['title' => 'Customer Outstanding', 'columns' => $columns('Customer'), 'rows' => $customers],
+                ['title' => 'Supplier Outstanding', 'columns' => $columns('Supplier'), 'rows' => $suppliers],
             ],
         ];
     }
-
     private function taxReport(array $dates): array
     {
         $sales = $this->totals(Sale::query(), 'sa_date', $dates, ['tax' => 'sa_gst']);
