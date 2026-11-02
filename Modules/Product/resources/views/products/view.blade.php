@@ -341,6 +341,7 @@
         </div>
     </div>
 </div>
+@include('product::products.partials.stock-ledger')
 @endsection
 @section('scripts')
 <script>

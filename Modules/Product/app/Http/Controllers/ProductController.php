@@ -3,6 +3,7 @@
 namespace Modules\Product\app\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Support\FinancialYear;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -20,6 +21,7 @@ use Modules\Product\app\Models\StockLedger;
 use Modules\Product\app\Services\InventoryLabelService;
 use Modules\Product\app\Services\OpeningStockService;
 use Modules\Product\app\Services\ProductStockService;
+use Modules\Product\app\Services\ProductStockLedgerReport;
 use Modules\Purchase\app\Models\PurchaseDetail;
 use Modules\Sale\app\Models\SaleDetail;
 use Modules\Service\app\Models\ServiceDetail;
@@ -416,9 +418,17 @@ class ProductController extends Controller
         }
     }
 
-    public function show($id)
+    public function show(Request $request, $id, ProductStockLedgerReport $ledgerReport)
     {
         $product = Product::with(['stock', 'stockBatches', 'mrpStockLots'])->findOrFail($id);
+        [$yearStart, $yearEnd] = FinancialYear::bounds();
+        $ledgerDates = validator([
+            'ledger_from' => $request->input('ledger_from') ?: $yearStart->toDateString(),
+            'ledger_to' => $request->input('ledger_to') ?: $yearEnd->toDateString(),
+        ], [
+            'ledger_from' => ['required', 'date_format:Y-m-d'],
+            'ledger_to' => ['required', 'date_format:Y-m-d', 'after_or_equal:ledger_from'],
+        ])->validate();
         $inventoryMode = $this->productStock->inventoryMode();
         $purchases = PurchaseDetail::getProductPurchaseSummaryBySupplier($product->product_code)->keyBy('pu_vendor');
         $sales_summary = SaleDetail::getProductSaleSummaryByCustomer($product->product_code);
@@ -467,6 +477,11 @@ class ProductController extends Controller
             ->except(['product_code', 'product_name'])
             ->all();
         $data['currencySymbol'] = Company::query()->value('currency_symbol') ?: 'Rs.';
+        $data['stockLedger'] = $ledgerReport->forProduct(
+            $product->product_code,
+            $ledgerDates['ledger_from'],
+            $ledgerDates['ledger_to']
+        );
 
         return view('product::products.view', $data);
     }
